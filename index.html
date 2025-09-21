@@ -1,0 +1,1842 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏔️ CRM Bolivia - Sistema Completo Multi-usuario</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        .fade-in { animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .pulse-dot { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        .progress-bar { transition: width 0.5s ease-in-out; }
+        .tab-active { border-bottom: 3px solid #2563eb; background: #eff6ff; }
+        .stat-card { transition: transform 0.2s; }
+        .stat-card:hover { transform: translateY(-2px); }
+        .chart-container { position: relative; height: 300px; }
+        .loading { opacity: 0.7; pointer-events: none; }
+        .autocomplete {
+            position: relative;
+        }
+        .autocomplete-list {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 100;
+            display: none;
+        }
+        .autocomplete-item {
+            padding: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        .autocomplete-item:hover {
+            background: #f3f4f6;
+        }
+        .autocomplete-item:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Pantalla de Login -->
+    <div id="login-screen" class="min-h-screen bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center">
+        <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-bold text-gray-900 mb-2">🏔️ CRM Bolivia</h1>
+                <p class="text-gray-600">Sistema Multi-usuario Completo</p>
+                <p class="text-sm text-blue-600 mt-2">Dashboard Administrador + 50 Usuarios</p>
+            </div>
+            
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Usuario</label>
+                    <input
+                        type="text"
+                        id="login-usuario"
+                        class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Nombre de usuario"
+                    />
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Contraseña</label>
+                    <input
+                        type="password"
+                        id="login-password"
+                        class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Contraseña"
+                    />
+                </div>
+                
+                <div id="login-error" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                    Credenciales incorrectas
+                </div>
+                
+                <button
+                    onclick="iniciarSesion()"
+                    class="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors"
+                >
+                    Iniciar Sesión
+                </button>
+            </div>
+            
+            <div class="mt-8 p-4 bg-gray-50 rounded text-sm">
+                <h4 class="font-semibold mb-2">👥 Accesos del Sistema:</h4>
+                <div class="space-y-1 text-xs">
+                    <div><strong>🔑 Administrador:</strong> ADMIN / admin123</div>
+                    <div><strong>👨‍💼 Supervisor:</strong> GABRIELA CESPEDEZ / super123</div>
+                    <div><strong>👷‍♀️ Técnico:</strong> LIZBETH HEREDIA / tech123</div>
+                    <div class="text-gray-500 mt-2">
+                        <strong>✨ Funcionalidades:</strong><br>
+                        ✅ Dashboard Administrador Completo<br>
+                        ✅ 8 Secciones de Reportes<br>
+                        ✅ 50 Usuarios Configurados<br>
+                        ✅ Exportación a Excel<br>
+                        ✅ Tiempo Real<br>
+                        ✅ Control por Roles
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aplicación Principal -->
+    <div id="app-principal" class="hidden fade-in">
+        <!-- Header Dinámico según el Rol -->
+        <div id="header-admin" class="hidden bg-gradient-to-r from-blue-600 to-purple-700 text-white shadow-lg">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center py-4">
+                    <div>
+                        <h1 class="text-2xl font-bold">🏔️ CRM Bolivia - Dashboard Administrador</h1>
+                        <p class="text-blue-100">
+                            Control Total del Sistema • 50 Usuarios • Reportes Completos
+                            <span id="actualizando-indicator" class="ml-2 hidden">🔄 Actualizando...</span>
+                        </p>
+                    </div>
+                    
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-2 text-blue-100">
+                            <div class="w-2 h-2 bg-green-400 rounded-full pulse-dot"></div>
+                            <span>Sistema Online</span>
+                        </div>
+                        
+                        <div class="text-blue-100 text-sm">
+                            <span id="ultima-actualizacion"></span>
+                        </div>
+                        
+                        <button onclick="exportarTodosReportes()" class="bg-green-500 hover:bg-green-600 px-4 py-2 rounded text-white font-medium">
+                            📊 Exportar Todo
+                        </button>
+                        
+                        <button onclick="cerrarSesion()" class="bg-red-500 hover:bg-red-600 px-4 py-2 rounded text-white font-medium">
+                            🚪 Salir
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Header para Supervisores y Técnicos -->
+        <div id="header-usuario" class="hidden bg-white shadow-sm border-b">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center py-4">
+                    <div>
+                        <h1 class="text-xl font-bold text-gray-900">🏔️ CRM Bolivia</h1>
+                        <p class="text-sm text-gray-500">
+                            Bienvenido, <strong id="usuario-nombre"></strong> (<span id="usuario-rol"></span>)
+                            <span id="actualizando-indicator-user" class="text-blue-600 ml-2 hidden">🔄 Actualizando...</span>
+                        </p>
+                    </div>
+                    
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-2 text-sm text-gray-600">
+                            <div class="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
+                            <span>En línea</span>
+                        </div>
+                        
+                        <div class="text-sm text-gray-600">
+                            <span id="ultima-actualizacion-user"></span>
+                        </div>
+                        
+                        <button onclick="cerrarSesion()" class="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-900 border rounded">
+                            🚪 Salir
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navegación de Tabs para ADMIN -->
+        <div id="nav-admin" class="hidden bg-white shadow-sm border-b">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex overflow-x-auto">
+                    <button onclick="cambiarTab('general')" id="tab-general" class="tab-active px-6 py-3 text-sm font-medium whitespace-nowrap">
+                        📊 Resumen General
+                    </button>
+                    <button onclick="cambiarTab('tecnicos')" id="tab-tecnicos" class="px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                        👥 Por Técnico
+                    </button>
+                    <button onclick="cambiarTab('supervisores')" id="tab-supervisores" class="px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                        👨‍💼 Por Supervisor
+                    </button>
+                    <button onclick="cambiarTab('tareas')" id="tab-tareas" class="px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                        📋 Por Tipo Tarea
+                    </button>
+                    <button onclick="cambiarTab('ubicaciones')" id="tab-ubicaciones" class="px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                        🗺️ Por Ubicación
+                    </button>
+                    <button onclick="cambiarTab('fechas')" id="tab-fechas" class="px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                        📅 Por Fechas
+                    </button>
+                    <button onclick="cambiarTab('comparativas')" id="tab-comparativas" class="px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                        ⚖️ Comparativas
+                    </button>
+                    <button onclick="cambiarTab('alertas')" id="tab-alertas" class="px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                        🚨 Alertas
+                    </button>
+                    <button onclick="cambiarTab('gestion')" id="tab-gestion" class="px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                        ⚙️ Gestión
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contenido Principal -->
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+            <!-- CONTENIDO PARA ADMIN -->
+            <div id="contenido-admin" class="hidden">
+                <!-- TAB 1: RESUMEN GENERAL -->
+                <div id="content-general" class="fade-in">
+                    <!-- KPIs Principales -->
+                    <div class="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
+                        <div class="bg-white p-4 rounded-lg shadow stat-card">
+                            <div class="text-center">
+                                <div class="text-2xl font-bold text-blue-600" id="kpi-total-tareas">0</div>
+                                <div class="text-sm text-gray-600">Total Tareas</div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow stat-card">
+                            <div class="text-center">
+                                <div class="text-2xl font-bold text-green-600" id="kpi-finalizadas">0</div>
+                                <div class="text-sm text-gray-600">Finalizadas</div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow stat-card">
+                            <div class="text-center">
+                                <div class="text-2xl font-bold text-yellow-600" id="kpi-proceso">0</div>
+                                <div class="text-sm text-gray-600">En Proceso</div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow stat-card">
+                            <div class="text-center">
+                                <div class="text-2xl font-bold text-red-600" id="kpi-observadas">0</div>
+                                <div class="text-sm text-gray-600">Observadas</div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow stat-card">
+                            <div class="text-center">
+                                <div class="text-2xl font-bold text-purple-600" id="kpi-avance-promedio">0%</div>
+                                <div class="text-sm text-gray-600">Avance Promedio</div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow stat-card">
+                            <div class="text-center">
+                                <div class="text-2xl font-bold text-indigo-600" id="kpi-productividad">0%</div>
+                                <div class="text-sm text-gray-600">Productividad</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gráficos Principales -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-lg font-semibold mb-4">📊 Distribución de Estados</h3>
+                            <div class="chart-container">
+                                <canvas id="chart-estados"></canvas>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-lg font-semibold mb-4">📈 Avance por Día</h3>
+                            <div class="chart-container">
+                                <canvas id="chart-avance-diario"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Top Rankings -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-lg font-semibold mb-4">🏆 Top 10 Técnicos</h3>
+                            <div id="ranking-tecnicos" class="space-y-3">
+                                <!-- Se llena dinámicamente -->
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-lg font-semibold mb-4">👨‍💼 Ranking Supervisores</h3>
+                            <div id="ranking-supervisores" class="space-y-3">
+                                <!-- Se llena dinámicamente -->
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-lg font-semibold mb-4">🗺️ Top Departamentos</h3>
+                            <div id="ranking-departamentos" class="space-y-3">
+                                <!-- Se llena dinámicamente -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 2: POR TÉCNICO -->
+                <div id="content-tecnicos" class="hidden">
+                    <!-- Filtros -->
+                    <div class="bg-white p-4 rounded-lg shadow mb-6">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Buscar Técnico</label>
+                                <input type="text" id="filtro-tecnico-nombre" placeholder="Nombre del técnico..." 
+                                       class="w-full border rounded px-3 py-2" oninput="filtrarTecnicos()">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Supervisor</label>
+                                <select id="filtro-tecnico-supervisor" class="w-full border rounded px-3 py-2" onchange="filtrarTecnicos()">
+                                    <option value="">Todos los supervisores</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Estado</label>
+                                <select id="filtro-tecnico-estado" class="w-full border rounded px-3 py-2" onchange="filtrarTecnicos()">
+                                    <option value="">Todos los estados</option>
+                                    <option value="alto">Alto rendimiento (+80%)</option>
+                                    <option value="medio">Rendimiento medio (50-80%)</option>
+                                    <option value="bajo">Bajo rendimiento (-50%)</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <button onclick="exportarReporteTecnicos()" class="w-full bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                                    📊 Exportar Reporte
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Estadísticas de Técnicos -->
+                    <div class="bg-white rounded-lg shadow mb-6">
+                        <div class="px-6 py-4 border-b">
+                            <h3 class="text-lg font-semibold">👥 Análisis Detallado por Técnico</h3>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Técnico</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supervisor</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Tareas</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Finalizadas</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">En Proceso</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Observadas</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Promedio Avance</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Productividad</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Última Actividad</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabla-tecnicos-detallada" class="bg-white divide-y divide-gray-200">
+                                    <!-- Se llena dinámicamente -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Gráfico Comparativo Técnicos -->
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-lg font-semibold mb-4">📊 Comparativa de Rendimiento por Técnico</h3>
+                        <div style="height: 400px;">
+                            <canvas id="chart-tecnicos-comparativa"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 9: GESTIÓN (Solo Admin) -->
+                <div id="content-gestion" class="hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                        <!-- Crear Nueva Tarea -->
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-lg font-semibold mb-4">➕ Crear Nueva Tarea</h3>
+                            <button onclick="abrirModalTarea()" class="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                                Nueva Tarea
+                            </button>
+                        </div>
+
+                        <!-- Gestión de Usuarios -->
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-lg font-semibold mb-4">👥 Gestión de Usuarios</h3>
+                            <div class="space-y-2">
+                                <div class="text-sm">Total Usuarios: <span class="font-semibold">50</span></div>
+                                <div class="text-sm">Técnicos: <span class="font-semibold">45</span></div>
+                                <div class="text-sm">Supervisores: <span class="font-semibold">4</span></div>
+                                <div class="text-sm">Administradores: <span class="font-semibold">1</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Lista de Todas las Tareas -->
+                    <div class="bg-white rounded-lg shadow">
+                        <div class="px-6 py-4 border-b">
+                            <h3 class="text-lg font-semibold">📋 Todas las Tareas del Sistema</h3>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Técnico</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supervisor</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarea</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ubicación</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Avance</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabla-todas-tareas" class="bg-white divide-y divide-gray-200">
+                                    <!-- Se llena dinámicamente -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CONTENIDO PARA SUPERVISORES Y TÉCNICOS -->
+            <div id="contenido-usuario" class="hidden">
+                <!-- Estadísticas principales -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-600">Total Tareas</p>
+                                <p class="text-2xl font-bold text-gray-900" id="user-total-tareas">0</p>
+                            </div>
+                            <div class="p-3 bg-blue-100 rounded-full">
+                                <div class="text-blue-600">📋</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-600">Finalizadas</p>
+                                <p class="text-2xl font-bold text-green-600" id="user-finalizadas">0</p>
+                            </div>
+                            <div class="p-3 bg-green-100 rounded-full">
+                                <div class="text-green-600">✅</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-600">En Proceso</p>
+                                <p class="text-2xl font-bold text-blue-600" id="user-proceso">0</p>
+                            </div>
+                            <div class="p-3 bg-blue-100 rounded-full">
+                                <div class="text-blue-600">⏳</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-600">Observadas</p>
+                                <p class="text-2xl font-bold text-red-600" id="user-observadas">0</p>
+                            </div>
+                            <div class="p-3 bg-red-100 rounded-full">
+                                <div class="text-red-600">⚠️</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Barra de progreso general -->
+                <div class="bg-white p-6 rounded-lg shadow mb-6">
+                    <h3 class="text-lg font-semibold mb-4">
+                        📈 Avance General: <span id="user-avance-porcentaje">0</span>%
+                        <span class="text-sm font-normal text-gray-500 ml-2">
+                            (Actualización automática cada 30s)
+                        </span>
+                    </h3>
+                    <div class="w-full bg-gray-200 rounded-full h-4">
+                        <div id="user-barra-progreso" class="bg-gradient-to-r from-blue-500 to-green-500 h-4 rounded-full progress-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Rendimiento por técnico (solo supervisores) -->
+                <div id="user-rendimiento-equipo" class="hidden bg-white p-6 rounded-lg shadow mb-6">
+                    <h3 class="text-lg font-semibold mb-4">👥 Rendimiento de Mi Equipo</h3>
+                    <div id="user-lista-tecnicos" class="space-y-4">
+                        <!-- Se llena dinámicamente -->
+                    </div>
+                </div>
+
+                <!-- Tareas del usuario -->
+                <div class="bg-white rounded-lg shadow">
+                    <div class="px-6 py-4 border-b flex justify-between items-center">
+                        <h3 class="text-lg font-semibold" id="titulo-tareas-usuario">📝 Mis Tareas</h3>
+                        <button id="btn-nueva-tarea-user" onclick="abrirModalTarea()" class="hidden bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                            ➕ Nueva Tarea
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Técnico</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarea</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ubicación</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Avance</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-tareas-usuario" class="bg-white divide-y divide-gray-200">
+                                <!-- Se llena dinámicamente -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Nueva/Editar Tarea -->
+        <div id="modal-tarea" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold" id="modal-titulo">Nueva Tarea</h3>
+                    <div class="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">
+                        🔍 Autocompletado activado
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Fecha</label>
+                        <input type="date" class="w-full border rounded px-3 py-2" id="tarea-fecha">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Supervisor</label>
+                        <div class="autocomplete">
+                            <input type="text" class="w-full border rounded px-3 py-2" id="tarea-supervisor" placeholder="Nombre del supervisor" autocomplete="off">
+                            <div class="autocomplete-list" id="lista-supervisores"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Técnico</label>
+                        <div class="autocomplete">
+                            <input type="text" class="w-full border rounded px-3 py-2" id="tarea-tecnico" placeholder="Nombre del técnico" autocomplete="off">
+                            <div class="autocomplete-list" id="lista-tecnicos"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Departamento</label>
+                        <div class="autocomplete">
+                            <input type="text" class="w-full border rounded px-3 py-2" id="tarea-departamento" placeholder="Departamento" autocomplete="off">
+                            <div class="autocomplete-list" id="lista-departamentos"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Municipio</label>
+                        <div class="autocomplete">
+                            <input type="text" class="w-full border rounded px-3 py-2" id="tarea-municipio" placeholder="Municipio" autocomplete="off">
+                            <div class="autocomplete-list" id="lista-municipios"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Tarea</label>
+                        <div class="autocomplete">
+                            <input type="text" class="w-full border rounded px-3 py-2" id="tarea-descripcion" placeholder="Descripción de la tarea" autocomplete="off">
+                            <div class="autocomplete-list" id="lista-tareas"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Dificultad</label>
+                        <select class="w-full border rounded px-3 py-2" id="tarea-dificultad">
+                            <option value="FACIL">FÁCIL</option>
+                            <option value="MEDIO" selected>MEDIO</option>
+                            <option value="DIFICIL">DIFÍCIL</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Carga Total</label>
+                        <input type="number" class="w-full border rounded px-3 py-2" id="tarea-carga" placeholder="Carga total" min="1">
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <label class="block text-sm font-medium mb-2">Avances por Etapa</label>
+                    <div class="grid grid-cols-6 gap-2">
+                        <div>
+                            <label class="block text-xs text-gray-600">Etapa 1</label>
+                            <input type="number" class="w-full border rounded px-2 py-1" id="avance-1" min="0" value="0">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-600">Etapa 2</label>
+                            <input type="number" class="w-full border rounded px-2 py-1" id="avance-2" min="0" value="0">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-600">Etapa 3</label>
+                            <input type="number" class="w-full border rounded px-2 py-1" id="avance-3" min="0" value="0">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-600">Etapa 4</label>
+                            <input type="number" class="w-full border rounded px-2 py-1" id="avance-4" min="0" value="0">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-600">Etapa 5</label>
+                            <input type="number" class="w-full border rounded px-2 py-1" id="avance-5" min="0" value="0">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-600">Etapa 6</label>
+                            <input type="number" class="w-full border rounded px-2 py-1" id="avance-6" min="0" value="0">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <label class="block text-sm font-medium mb-1">Estado</label>
+                    <select class="w-full border rounded px-3 py-2" id="tarea-estado">
+                        <option value="EN PROCESO">EN PROCESO</option>
+                        <option value="FINALIZADO">FINALIZADO</option>
+                        <option value="OBSERVADO">OBSERVADO</option>
+                    </select>
+                </div>
+                
+                <div class="flex justify-end gap-2 mt-6">
+                    <button onclick="cerrarModalTarea()" class="px-4 py-2 border rounded hover:bg-gray-50">
+                        Cancelar
+                    </button>
+                    <button onclick="guardarTarea()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                        Guardar Tarea
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Variables globales
+        let usuarioActual = null;
+        let tareas = [];
+        let usuarios = [];
+        let charts = {};
+        let tabActual = 'general';
+        let tareaEditando = null;
+        let intervalos = [];
+
+        // Datos de usuarios (50 personas)
+        const sistemaUsuarios = [
+            // Administradores
+            { id: 1, nombre: 'ADMIN', password: 'admin123', rol: 'ADMINISTRADOR', supervisor: null },
+            
+            // Supervisores
+            { id: 2, nombre: 'GABRIELA CESPEDEZ', password: 'super123', rol: 'SUPERVISOR', supervisor: null },
+            { id: 3, nombre: 'MARCO RODRIGUEZ', password: 'super123', rol: 'SUPERVISOR', supervisor: null },
+            { id: 4, nombre: 'ANA MARTINEZ', password: 'super123', rol: 'SUPERVISOR', supervisor: null },
+            { id: 5, nombre: 'CARLOS VARGAS', password: 'super123', rol: 'SUPERVISOR', supervisor: null },
+            
+            // Técnicos (45 en total)
+            { id: 10, nombre: 'LIZBETH HEREDIA', password: 'tech123', rol: 'TECNICO', supervisor: 2 },
+            { id: 11, nombre: 'DIANA ADUVIRI', password: 'tech123', rol: 'TECNICO', supervisor: 2 },
+            { id: 12, nombre: 'RAMIRO MARTINEZ', password: 'tech123', rol: 'TECNICO', supervisor: 2 },
+            { id: 13, nombre: 'LUCIA MAMANI', password: 'tech123', rol: 'TECNICO', supervisor: 2 },
+            { id: 14, nombre: 'PEDRO QUISPE', password: 'tech123', rol: 'TECNICO', supervisor: 2 },
+            { id: 15, nombre: 'MARIA CONDORI', password: 'tech123', rol: 'TECNICO', supervisor: 2 },
+            { id: 16, nombre: 'JUAN FLORES', password: 'tech123', rol: 'TECNICO', supervisor: 2 },
+            { id: 17, nombre: 'ROSA CHOQUE', password: 'tech123', rol: 'TECNICO', supervisor: 2 },
+            { id: 18, nombre: 'LUIS PAREDES', password: 'tech123', rol: 'TECNICO', supervisor: 2 },
+            { id: 19, nombre: 'CARMEN VERA', password: 'tech123', rol: 'TECNICO', supervisor: 2 },
+            
+            { id: 20, nombre: 'FRANK BEJARANO', password: 'tech123', rol: 'TECNICO', supervisor: 3 },
+            { id: 21, nombre: 'STEFANY CHUQUIMIA', password: 'tech123', rol: 'TECNICO', supervisor: 3 },
+            { id: 22, nombre: 'GABRIEL SORIA', password: 'tech123', rol: 'TECNICO', supervisor: 3 },
+            { id: 23, nombre: 'CLAUDIA ROJAS', password: 'tech123', rol: 'TECNICO', supervisor: 3 },
+            { id: 24, nombre: 'MIGUEL TORRES', password: 'tech123', rol: 'TECNICO', supervisor: 3 },
+            { id: 25, nombre: 'PATRICIA SILVA', password: 'tech123', rol: 'TECNICO', supervisor: 3 },
+            { id: 26, nombre: 'ROBERTO MENDEZ', password: 'tech123', rol: 'TECNICO', supervisor: 3 },
+            { id: 27, nombre: 'ADRIANA CRUZ', password: 'tech123', rol: 'TECNICO', supervisor: 3 },
+            { id: 28, nombre: 'FERNANDO LOPEZ', password: 'tech123', rol: 'TECNICO', supervisor: 3 },
+            { id: 29, nombre: 'GLORIA JIMENEZ', password: 'tech123', rol: 'TECNICO', supervisor: 3 },
+            
+            { id: 30, nombre: 'RICARDO MORALES', password: 'tech123', rol: 'TECNICO', supervisor: 4 },
+            { id: 31, nombre: 'VERONICA GUTIERREZ', password: 'tech123', rol: 'TECNICO', supervisor: 4 },
+            { id: 32, nombre: 'CARLOS DELGADO', password: 'tech123', rol: 'TECNICO', supervisor: 4 },
+            { id: 33, nombre: 'SANDRA ORTEGA', password: 'tech123', rol: 'TECNICO', supervisor: 4 },
+            { id: 34, nombre: 'GONZALO RIVERA', password: 'tech123', rol: 'TECNICO', supervisor: 4 },
+            { id: 35, nombre: 'TERESA AGUILAR', password: 'tech123', rol: 'TECNICO', supervisor: 4 },
+            { id: 36, nombre: 'EDUARDO CASTRO', password: 'tech123', rol: 'TECNICO', supervisor: 4 },
+            { id: 37, nombre: 'PAOLA HERRERA', password: 'tech123', rol: 'TECNICO', supervisor: 4 },
+            { id: 38, nombre: 'ANTONIO VEGA', password: 'tech123', rol: 'TECNICO', supervisor: 4 },
+            { id: 39, nombre: 'MONICA REYES', password: 'tech123', rol: 'TECNICO', supervisor: 4 },
+            
+            { id: 40, nombre: 'JAVIER PONCE', password: 'tech123', rol: 'TECNICO', supervisor: 5 },
+            { id: 41, nombre: 'BEATRIZ SERRANO', password: 'tech123', rol: 'TECNICO', supervisor: 5 },
+            { id: 42, nombre: 'RAUL NAVARRO', password: 'tech123', rol: 'TECNICO', supervisor: 5 },
+            { id: 43, nombre: 'INES GUERRERO', password: 'tech123', rol: 'TECNICO', supervisor: 5 },
+            { id: 44, nombre: 'OSCAR MOLINA', password: 'tech123', rol: 'TECNICO', supervisor: 5 },
+            { id: 45, nombre: 'ELENA SANTOS', password: 'tech123', rol: 'TECNICO', supervisor: 5 },
+            { id: 46, nombre: 'DANIEL RAMOS', password: 'tech123', rol: 'TECNICO', supervisor: 5 },
+            { id: 47, nombre: 'SILVIA ROMERO', password: 'tech123', rol: 'TECNICO', supervisor: 5 },
+            { id: 48, nombre: 'MANUEL CABRERA', password: 'tech123', rol: 'TECNICO', supervisor: 5 },
+            { id: 49, nombre: 'JULIA MIRANDA', password: 'tech123', rol: 'TECNICO', supervisor: 5 },
+            { id: 50, nombre: 'ALBERTO FUENTES', password: 'tech123', rol: 'TECNICO', supervisor: 5 }
+        ];
+
+        // Tipos de tareas comunes
+        const tareasComunes = [
+            'LIMPIEZA DE INFORMACIÓN',
+            'VERIFICACIÓN DE DATOS',
+            'CENSO POBLACIONAL',
+            'MAPEO DE COMUNIDADES',
+            'CONTEO DE VIVIENDAS',
+            'REGISTRO DE FAMILIAS',
+            'ACTUALIZACIÓN DE CATASTRO',
+            'REVISIÓN DE DOCUMENTOS',
+            'VALIDACIÓN DE COORDENADAS',
+            'ENTREVISTAS A HABITANTES'
+        ];
+
+        // Departamentos de Bolivia
+        const departamentos = ['CHUQUISACA', 'LA PAZ', 'POTOSI', 'COCHABAMBA', 'ORURO', 'TARIJA', 'SANTA CRUZ', 'BENI', 'PANDO'];
+
+        // Inicialización
+        function inicializar() {
+            usuarios = sistemaUsuarios;
+            generarDatosMuestra();
+            configurarEventos();
+            configurarAutocompletado();
+        }
+
+        function configurarEventos() {
+            // Enter en campos de login
+            document.getElementById('login-usuario').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') iniciarSesion();
+            });
+            document.getElementById('login-password').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') iniciarSesion();
+            });
+        }
+
+        function iniciarSesion() {
+            const usuario = document.getElementById('login-usuario').value.toUpperCase();
+            const password = document.getElementById('login-password').value;
+            
+            const user = usuarios.find(u => u.nombre === usuario && u.password === password);
+            
+            if (user) {
+                usuarioActual = user;
+                document.getElementById('login-error').classList.add('hidden');
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('app-principal').classList.remove('hidden');
+                
+                configurarInterfazSegunRol();
+                iniciarActualizacionAutomatica();
+                actualizarDashboard();
+            } else {
+                document.getElementById('login-error').classList.remove('hidden');
+            }
+        }
+
+        function configurarInterfazSegunRol() {
+            if (usuarioActual.rol === 'ADMINISTRADOR') {
+                // Mostrar interfaz de administrador
+                document.getElementById('header-admin').classList.remove('hidden');
+                document.getElementById('nav-admin').classList.remove('hidden');
+                document.getElementById('contenido-admin').classList.remove('hidden');
+                document.getElementById('header-usuario').classList.add('hidden');
+                document.getElementById('contenido-usuario').classList.add('hidden');
+            } else {
+                // Mostrar interfaz de usuario (supervisor/técnico)
+                document.getElementById('header-usuario').classList.remove('hidden');
+                document.getElementById('contenido-usuario').classList.remove('hidden');
+                document.getElementById('header-admin').classList.add('hidden');
+                document.getElementById('nav-admin').classList.add('hidden');
+                document.getElementById('contenido-admin').classList.add('hidden');
+                
+                document.getElementById('usuario-nombre').textContent = usuarioActual.nombre;
+                document.getElementById('usuario-rol').textContent = usuarioActual.rol;
+                
+                // Configurar título y botones según el rol
+                if (usuarioActual.rol === 'SUPERVISOR') {
+                    document.getElementById('titulo-tareas-usuario').textContent = '📝 Tareas de Mi Equipo';
+                    document.getElementById('user-rendimiento-equipo').classList.remove('hidden');
+                    document.getElementById('btn-nueva-tarea-user').classList.remove('hidden');
+                } else {
+                    document.getElementById('titulo-tareas-usuario').textContent = '📝 Mis Tareas';
+                    document.getElementById('user-rendimiento-equipo').classList.add('hidden');
+                    document.getElementById('btn-nueva-tarea-user').classList.add('hidden');
+                }
+            }
+        }
+
+        function cerrarSesion() {
+            usuarioActual = null;
+            intervalos.forEach(clearInterval);
+            intervalos = [];
+            
+            document.getElementById('app-principal').classList.add('hidden');
+            document.getElementById('login-screen').classList.remove('hidden');
+            document.getElementById('login-usuario').value = '';
+            document.getElementById('login-password').value = '';
+        }
+
+        function generarDatosMuestra() {
+            const municipios = ['SUCRE', 'LA PAZ', 'SANTA CRUZ', 'COCHABAMBA', 'POTOSI', 'ORURO', 'TARIJA', 'TRINIDAD', 'COBIJA', 'PALOS BLANCOS', 'PUNA', 'SANTIAGO DE HUATA'];
+
+            tareas = [];
+            let id = 1;
+
+            // Generar tareas para cada técnico
+            const tecnicos = usuarios.filter(u => u.rol === 'TECNICO');
+            tecnicos.forEach(tecnico => {
+                const numTareas = Math.floor(Math.random() * 8) + 3; // 3-10 tareas por técnico
+                
+                for (let i = 0; i < numTareas; i++) {
+                    const cargaTotal = Math.floor(Math.random() * 1500) + 300;
+                    const fechaBase = new Date(2024, 8, Math.floor(Math.random() * 21) + 1);
+                    
+                    // Generar avances más realistas
+                    const avances = [];
+                    let avanceAcumulado = 0;
+                    for (let j = 0; j < 6; j++) {
+                        const maxAvance = (cargaTotal - avanceAcumulado) / (6 - j);
+                        const avance = Math.floor(Math.random() * maxAvance * 0.8);
+                        avances.push(avance);
+                        avanceAcumulado += avance;
+                    }
+                    
+                    // Determinar estado basado en avance
+                    const porcentajeAvance = (avanceAcumulado / cargaTotal) * 100;
+                    let estado;
+                    if (porcentajeAvance >= 95) {
+                        estado = 'FINALIZADO';
+                    } else if (porcentajeAvance >= 70) {
+                        estado = 'EN PROCESO';
+                    } else if (porcentajeAvance >= 30) {
+                        estado = Math.random() > 0.8 ? 'OBSERVADO' : 'EN PROCESO';
+                    } else {
+                        estado = Math.random() > 0.6 ? 'OBSERVADO' : 'EN PROCESO';
+                    }
+
+                    tareas.push({
+                        id: id++,
+                        fecha: fechaBase.toISOString().split('T')[0],
+                        tecnico_id: tecnico.id,
+                        supervisor_id: tecnico.supervisor,
+                        departamento: departamentos[Math.floor(Math.random() * departamentos.length)],
+                        municipio: municipios[Math.floor(Math.random() * municipios.length)],
+                        tarea: tareasComunes[Math.floor(Math.random() * tareasComunes.length)],
+                        dificultad: ['FACIL', 'MEDIO', 'DIFICIL'][Math.floor(Math.random() * 3)],
+                        cargaTotal: cargaTotal,
+                        avances: avances,
+                        estado: estado,
+                        fecha_creacion: fechaBase.toISOString(),
+                        ultima_actualizacion: new Date().toISOString()
+                    });
+                }
+            });
+
+            // Guardar en localStorage
+            localStorage.setItem('crm-integrado-tareas', JSON.stringify(tareas));
+        }
+
+        function iniciarActualizacionAutomatica() {
+            // Actualizar tiempo cada segundo
+            const intervaloTiempo = setInterval(() => {
+                const tiempo = 'Actualizado: ' + new Date().toLocaleTimeString();
+                if (document.getElementById('ultima-actualizacion')) {
+                    document.getElementById('ultima-actualizacion').textContent = tiempo;
+                }
+                if (document.getElementById('ultima-actualizacion-user')) {
+                    document.getElementById('ultima-actualizacion-user').textContent = tiempo;
+                }
+            }, 1000);
+
+            // Actualizar datos cada 30 segundos
+            const intervaloDatos = setInterval(() => {
+                document.getElementById('actualizando-indicator')?.classList.remove('hidden');
+                document.getElementById('actualizando-indicator-user')?.classList.remove('hidden');
+                
+                setTimeout(() => {
+                    actualizarDashboard();
+                    document.getElementById('actualizando-indicator')?.classList.add('hidden');
+                    document.getElementById('actualizando-indicator-user')?.classList.add('hidden');
+                }, 1500);
+            }, 30000);
+
+            intervalos.push(intervaloTiempo, intervaloDatos);
+        }
+
+        function calcularPorcentajeAvance(tarea) {
+            const avanceTotal = tarea.avances.reduce((sum, avance) => sum + (avance || 0), 0);
+            return ((avanceTotal / tarea.cargaTotal) * 100).toFixed(1);
+        }
+
+        function getNombreUsuario(id) {
+            const user = usuarios.find(u => u.id === id);
+            return user ? user.nombre : 'Desconocido';
+        }
+
+        function obtenerTareasFiltradas() {
+            if (!usuarioActual) return [];
+            
+            if (usuarioActual.rol === 'ADMINISTRADOR') {
+                return tareas;
+            } else if (usuarioActual.rol === 'SUPERVISOR') {
+                return tareas.filter(t => t.supervisor_id === usuarioActual.id);
+            } else {
+                return tareas.filter(t => t.tecnico_id === usuarioActual.id);
+            }
+        }
+
+        function actualizarDashboard() {
+            if (usuarioActual.rol === 'ADMINISTRADOR') {
+                actualizarDashboardAdmin();
+            } else {
+                actualizarDashboardUsuario();
+            }
+        }
+
+        function actualizarDashboardAdmin() {
+            switch(tabActual) {
+                case 'general':
+                    actualizarResumenGeneral();
+                    break;
+                case 'tecnicos':
+                    actualizarReporteTecnicos();
+                    break;
+                case 'gestion':
+                    actualizarGestion();
+                    break;
+                // Aquí van los otros casos...
+            }
+        }
+
+        function actualizarDashboardUsuario() {
+            const tareasFiltradas = obtenerTareasFiltradas();
+            
+            const total = tareasFiltradas.length;
+            const finalizadas = tareasFiltradas.filter(t => t.estado === 'FINALIZADO').length;
+            const enProceso = tareasFiltradas.filter(t => t.estado === 'EN PROCESO').length;
+            const observadas = tareasFiltradas.filter(t => t.estado === 'OBSERVADO').length;
+            
+            const promedioAvance = total > 0 
+                ? tareasFiltradas.reduce((acc, tarea) => acc + parseFloat(calcularPorcentajeAvance(tarea)), 0) / total
+                : 0;
+
+            document.getElementById('user-total-tareas').textContent = total;
+            document.getElementById('user-finalizadas').textContent = finalizadas;
+            document.getElementById('user-proceso').textContent = enProceso;
+            document.getElementById('user-observadas').textContent = observadas;
+            document.getElementById('user-avance-porcentaje').textContent = promedioAvance.toFixed(1);
+            document.getElementById('user-barra-progreso').style.width = promedioAvance + '%';
+
+            // Actualizar tabla de tareas
+            actualizarTablaTareasUsuario();
+
+            // Si es supervisor, actualizar rendimiento del equipo
+            if (usuarioActual.rol === 'SUPERVISOR') {
+                actualizarRendimientoEquipo();
+            }
+        }
+
+        function actualizarTablaTareasUsuario() {
+            const tareasFiltradas = obtenerTareasFiltradas();
+            const tbody = document.getElementById('tabla-tareas-usuario');
+            tbody.innerHTML = '';
+
+            tareasFiltradas.forEach(tarea => {
+                const porcentaje = calcularPorcentajeAvance(tarea);
+                const estadoClass = {
+                    'FINALIZADO': 'bg-green-100 text-green-800',
+                    'EN PROCESO': 'bg-blue-100 text-blue-800',
+                    'OBSERVADO': 'bg-red-100 text-red-800'
+                }[tarea.estado];
+
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50';
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${tarea.fecha}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        ${getNombreUsuario(tarea.tecnico_id)}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${tarea.tarea}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${tarea.departamento}, ${tarea.municipio}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="flex-1 w-full bg-gray-200 rounded-full h-2 mr-2">
+                                <div class="bg-blue-600 h-2 rounded-full" style="width: ${porcentaje}%"></div>
+                            </div>
+                            <span class="text-sm text-gray-600">${porcentaje}%</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${estadoClass}">
+                            ${tarea.estado}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <button onclick="editarTarea(${tarea.id})" class="text-blue-600 hover:text-blue-900 mr-3">
+                            ✏️ Editar
+                        </button>
+                        ${usuarioActual.rol === 'SUPERVISOR' ? `<button onclick="eliminarTarea(${tarea.id})" class="text-red-600 hover:text-red-900">🗑️ Eliminar</button>` : ''}
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function actualizarRendimientoEquipo() {
+            const tecnicosDelSupervisor = usuarios.filter(u => u.rol === 'TECNICO' && u.supervisor === usuarioActual.id);
+            const listaTecnicos = document.getElementById('user-lista-tecnicos');
+            listaTecnicos.innerHTML = '';
+
+            tecnicosDelSupervisor.forEach(tecnico => {
+                const tareasDelTecnico = tareas.filter(t => t.tecnico_id === tecnico.id);
+                const totalTareas = tareasDelTecnico.length;
+                const finalizadas = tareasDelTecnico.filter(t => t.estado === 'FINALIZADO').length;
+                const promedioAvance = totalTareas > 0 
+                    ? tareasDelTecnico.reduce((acc, tarea) => acc + parseFloat(calcularPorcentajeAvance(tarea)), 0) / totalTareas
+                    : 0;
+
+                const tecnicoDiv = document.createElement('div');
+                tecnicoDiv.className = 'flex items-center justify-between p-4 bg-gray-50 rounded';
+                tecnicoDiv.innerHTML = `
+                    <div>
+                        <span class="font-medium">${tecnico.nombre}</span>
+                        <div class="text-sm text-gray-600">
+                            ${totalTareas} tareas • ${finalizadas} finalizadas
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="w-32 bg-gray-200 rounded-full h-2">
+                            <div class="bg-blue-600 h-2 rounded-full progress-bar" style="width: ${promedioAvance}%"></div>
+                        </div>
+                        <span class="text-sm font-medium text-gray-600 w-12">
+                            ${promedioAvance.toFixed(1)}%
+                        </span>
+                    </div>
+                `;
+                listaTecnicos.appendChild(tecnicoDiv);
+            });
+        }
+
+        // Funciones para administrador
+        function cambiarTab(tab) {
+            // Ocultar todos los contenidos
+            ['general', 'tecnicos', 'supervisores', 'tareas', 'ubicaciones', 'fechas', 'comparativas', 'alertas', 'gestion'].forEach(t => {
+                const content = document.getElementById('content-' + t);
+                const tabBtn = document.getElementById('tab-' + t);
+                if (content) content.classList.add('hidden');
+                if (tabBtn) {
+                    tabBtn.classList.remove('tab-active');
+                    tabBtn.classList.add('text-gray-600');
+                }
+            });
+
+            // Mostrar el seleccionado
+            const selectedContent = document.getElementById('content-' + tab);
+            const selectedTab = document.getElementById('tab-' + tab);
+            if (selectedContent) selectedContent.classList.remove('hidden');
+            if (selectedTab) {
+                selectedTab.classList.add('tab-active');
+                selectedTab.classList.remove('text-gray-600');
+            }
+
+            tabActual = tab;
+            actualizarDashboard();
+        }
+
+        function actualizarResumenGeneral() {
+            // KPIs principales
+            const totalTareas = tareas.length;
+            const finalizadas = tareas.filter(t => t.estado === 'FINALIZADO').length;
+            const enProceso = tareas.filter(t => t.estado === 'EN PROCESO').length;
+            const observadas = tareas.filter(t => t.estado === 'OBSERVADO').length;
+            const promedioAvance = totalTareas > 0 
+                ? tareas.reduce((acc, tarea) => acc + parseFloat(calcularPorcentajeAvance(tarea)), 0) / totalTareas
+                : 0;
+            const productividad = finalizadas > 0 ? ((finalizadas / totalTareas) * 100) : 0;
+
+            document.getElementById('kpi-total-tareas').textContent = totalTareas;
+            document.getElementById('kpi-finalizadas').textContent = finalizadas;
+            document.getElementById('kpi-proceso').textContent = enProceso;
+            document.getElementById('kpi-observadas').textContent = observadas;
+            document.getElementById('kpi-avance-promedio').textContent = promedioAvance.toFixed(1) + '%';
+            document.getElementById('kpi-productividad').textContent = productividad.toFixed(1) + '%';
+
+            // Gráfico de estados
+            crearGraficoEstados();
+            
+            // Gráfico de avance diario
+            crearGraficoAvanceDiario();
+
+            // Rankings
+            actualizarRankings();
+        }
+
+        function crearGraficoEstados() {
+            const ctx = document.getElementById('chart-estados');
+            if (!ctx) return;
+            
+            if (charts.estados) charts.estados.destroy();
+            
+            const finalizadas = tareas.filter(t => t.estado === 'FINALIZADO').length;
+            const enProceso = tareas.filter(t => t.estado === 'EN PROCESO').length;
+            const observadas = tareas.filter(t => t.estado === 'OBSERVADO').length;
+
+            charts.estados = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Finalizadas', 'En Proceso', 'Observadas'],
+                    datasets: [{
+                        data: [finalizadas, enProceso, observadas],
+                        backgroundColor: ['#10b981', '#3b82f6', '#ef4444'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        function crearGraficoAvanceDiario() {
+            const ctx = document.getElementById('chart-avance-diario');
+            if (!ctx) return;
+            
+            if (charts.avanceDiario) charts.avanceDiario.destroy();
+            
+            // Agrupar tareas por fecha
+            const tareasPoFecha = {};
+            tareas.forEach(tarea => {
+                const fecha = tarea.fecha;
+                if (!tareasPoFecha[fecha]) {
+                    tareasPoFecha[fecha] = [];
+                }
+                tareasPoFecha[fecha].push(tarea);
+            });
+
+            const fechas = Object.keys(tareasPoFecha).sort();
+            const avances = fechas.map(fecha => {
+                const tareasDelDia = tareasPoFecha[fecha];
+                const promedioDelDia = tareasDelDia.reduce((acc, tarea) => 
+                    acc + parseFloat(calcularPorcentajeAvance(tarea)), 0) / tareasDelDia.length;
+                return promedioDelDia;
+            });
+
+            charts.avanceDiario = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: fechas.map(f => new Date(f).toLocaleDateString()),
+                    datasets: [{
+                        label: 'Avance Promedio (%)',
+                        data: avances,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        }
+
+        function actualizarRankings() {
+            // Ranking técnicos
+            const tecnicos = usuarios.filter(u => u.rol === 'TECNICO');
+            const rankingTecnicos = tecnicos.map(tecnico => {
+                const tareasDelTecnico = tareas.filter(t => t.tecnico_id === tecnico.id);
+                const promedioAvance = tareasDelTecnico.length > 0 
+                    ? tareasDelTecnico.reduce((acc, tarea) => acc + parseFloat(calcularPorcentajeAvance(tarea)), 0) / tareasDelTecnico.length
+                    : 0;
+                return { nombre: tecnico.nombre, avance: promedioAvance };
+            }).sort((a, b) => b.avance - a.avance).slice(0, 10);
+
+            const rankingTecnicosHTML = rankingTecnicos.map((item, index) => `
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-medium">${index + 1}. ${item.nombre}</span>
+                    <span class="text-sm text-gray-600">${item.avance.toFixed(1)}%</span>
+                </div>
+            `).join('');
+            
+            const rankingTecnicosEl = document.getElementById('ranking-tecnicos');
+            if (rankingTecnicosEl) {
+                rankingTecnicosEl.innerHTML = rankingTecnicosHTML;
+            }
+
+            // Ranking supervisores
+            const supervisores = usuarios.filter(u => u.rol === 'SUPERVISOR');
+            const rankingSupervisores = supervisores.map(supervisor => {
+                const tecnicosDelSupervisor = usuarios.filter(u => u.supervisor === supervisor.id);
+                const tareasDelEquipo = tareas.filter(t => 
+                    tecnicosDelSupervisor.some(tec => tec.id === t.tecnico_id)
+                );
+                const promedioEquipo = tareasDelEquipo.length > 0 
+                    ? tareasDelEquipo.reduce((acc, tarea) => acc + parseFloat(calcularPorcentajeAvance(tarea)), 0) / tareasDelEquipo.length
+                    : 0;
+                return { nombre: supervisor.nombre, avance: promedioEquipo };
+            }).sort((a, b) => b.avance - a.avance);
+
+            const rankingSupervisoresHTML = rankingSupervisores.map((item, index) => `
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-medium">${index + 1}. ${item.nombre}</span>
+                    <span class="text-sm text-gray-600">${item.avance.toFixed(1)}%</span>
+                </div>
+            `).join('');
+            
+            const rankingSupervisoresEl = document.getElementById('ranking-supervisores');
+            if (rankingSupervisoresEl) {
+                rankingSupervisoresEl.innerHTML = rankingSupervisoresHTML;
+            }
+
+            // Ranking departamentos
+            const rankingDepartamentos = departamentos.map(dept => {
+                const tareasDelDept = tareas.filter(t => t.departamento === dept);
+                const promedioDept = tareasDelDept.length > 0 
+                    ? tareasDelDept.reduce((acc, tarea) => acc + parseFloat(calcularPorcentajeAvance(tarea)), 0) / tareasDelDept.length
+                    : 0;
+                return { nombre: dept, avance: promedioDept };
+            }).sort((a, b) => b.avance - a.avance);
+
+            const rankingDepartamentosHTML = rankingDepartamentos.map((item, index) => `
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-medium">${index + 1}. ${item.nombre}</span>
+                    <span class="text-sm text-gray-600">${item.avance.toFixed(1)}%</span>
+                </div>
+            `).join('');
+            
+            const rankingDepartamentosEl = document.getElementById('ranking-departamentos');
+            if (rankingDepartamentosEl) {
+                rankingDepartamentosEl.innerHTML = rankingDepartamentosHTML;
+            }
+        }
+
+        function actualizarReporteTecnicos() {
+            const tecnicos = usuarios.filter(u => u.rol === 'TECNICO');
+            const tbody = document.getElementById('tabla-tecnicos-detallada');
+            if (!tbody) return;
+            
+            tbody.innerHTML = '';
+
+            tecnicos.forEach(tecnico => {
+                const tareasDelTecnico = tareas.filter(t => t.tecnico_id === tecnico.id);
+                const supervisor = usuarios.find(u => u.id === tecnico.supervisor);
+                
+                const totalTareas = tareasDelTecnico.length;
+                const finalizadas = tareasDelTecnico.filter(t => t.estado === 'FINALIZADO').length;
+                const enProceso = tareasDelTecnico.filter(t => t.estado === 'EN PROCESO').length;
+                const observadas = tareasDelTecnico.filter(t => t.estado === 'OBSERVADO').length;
+                
+                const promedioAvance = totalTareas > 0 
+                    ? tareasDelTecnico.reduce((acc, tarea) => acc + parseFloat(calcularPorcentajeAvance(tarea)), 0) / totalTareas
+                    : 0;
+                
+                const productividad = totalTareas > 0 ? (finalizadas / totalTareas) * 100 : 0;
+                
+                const ultimaActividad = tareasDelTecnico.length > 0 
+                    ? new Date(Math.max(...tareasDelTecnico.map(t => new Date(t.ultima_actualizacion)))).toLocaleDateString()
+                    : 'N/A';
+
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50';
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="font-medium text-gray-900">${tecnico.nombre}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        ${supervisor ? supervisor.nombre : 'N/A'}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${totalTareas}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">${finalizadas}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-600">${enProceso}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-red-600">${observadas}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                                <div class="bg-blue-600 h-2 rounded-full" style="width: ${promedioAvance}%"></div>
+                            </div>
+                            <span class="text-sm text-gray-600">${promedioAvance.toFixed(1)}%</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            productividad >= 70 ? 'bg-green-100 text-green-800' :
+                            productividad >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                        }">
+                            ${productividad.toFixed(1)}%
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${ultimaActividad}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <button onclick="verDetalleTecnico(${tecnico.id})" class="text-blue-600 hover:text-blue-900">
+                            👁️ Ver Detalle
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            // Llenar filtros
+            llenarFiltros();
+
+            // Gráfico comparativo
+            crearGraficoTecnicosComparativa();
+        }
+
+        function crearGraficoTecnicosComparativa() {
+            const ctx = document.getElementById('chart-tecnicos-comparativa');
+            if (!ctx) return;
+            
+            if (charts.tecnicosComparativa) charts.tecnicosComparativa.destroy();
+            
+            const tecnicos = usuarios.filter(u => u.rol === 'TECNICO').slice(0, 15); // Top 15
+            const nombres = tecnicos.map(t => t.nombre.split(' ')[0]); // Solo primer nombre
+            const avances = tecnicos.map(tecnico => {
+                const tareasDelTecnico = tareas.filter(t => t.tecnico_id === tecnico.id);
+                return tareasDelTecnico.length > 0 
+                    ? tareasDelTecnico.reduce((acc, tarea) => acc + parseFloat(calcularPorcentajeAvance(tarea)), 0) / tareasDelTecnico.length
+                    : 0;
+            });
+
+            charts.tecnicosComparativa = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: nombres,
+                    datasets: [{
+                        label: 'Promedio de Avance (%)',
+                        data: avances,
+                        backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        }
+
+        function actualizarGestion() {
+            // Actualizar tabla de todas las tareas
+            const tbody = document.getElementById('tabla-todas-tareas');
+            if (!tbody) return;
+            
+            tbody.innerHTML = '';
+
+            tareas.forEach(tarea => {
+                const tecnico = getNombreUsuario(tarea.tecnico_id);
+                const supervisor = getNombreUsuario(tarea.supervisor_id);
+                const avance = calcularPorcentajeAvance(tarea);
+                const estadoClass = {
+                    'FINALIZADO': 'bg-green-100 text-green-800',
+                    'EN PROCESO': 'bg-blue-100 text-blue-800',
+                    'OBSERVADO': 'bg-red-100 text-red-800'
+                }[tarea.estado];
+
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50';
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${tarea.id}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${tarea.fecha}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${tecnico}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${supervisor}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${tarea.tarea}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${tarea.departamento}, ${tarea.municipio}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                                <div class="bg-blue-600 h-2 rounded-full" style="width: ${avance}%"></div>
+                            </div>
+                            <span class="text-sm text-gray-600">${avance}%</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${estadoClass}">
+                            ${tarea.estado}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <button onclick="editarTarea(${tarea.id})" class="text-blue-600 hover:text-blue-900 mr-3">
+                            ✏️ Editar
+                        </button>
+                        <button onclick="eliminarTarea(${tarea.id})" class="text-red-600 hover:text-red-900">
+                            🗑️ Eliminar
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function llenarFiltros() {
+            // Llenar filtro de supervisores en la pestaña de técnicos
+            const supervisores = usuarios.filter(u => u.rol === 'SUPERVISOR');
+            const selectSupervisor = document.getElementById('filtro-tecnico-supervisor');
+            if (selectSupervisor) {
+                selectSupervisor.innerHTML = '<option value="">Todos los supervisores</option>';
+                supervisores.forEach(supervisor => {
+                    selectSupervisor.innerHTML += `<option value="${supervisor.id}">${supervisor.nombre}</option>`;
+                });
+            }
+        }
+
+        function filtrarTecnicos() {
+            const nombreFiltro = document.getElementById('filtro-tecnico-nombre')?.value.toLowerCase() || '';
+            const supervisorFiltro = document.getElementById('filtro-tecnico-supervisor')?.value || '';
+            const estadoFiltro = document.getElementById('filtro-tecnico-estado')?.value || '';
+
+            const filas = document.querySelectorAll('#tabla-tecnicos-detallada tr');
+            filas.forEach(fila => {
+                const nombre = fila.querySelector('td:first-child')?.textContent.toLowerCase() || '';
+                const supervisorCell = fila.querySelector('td:nth-child(2)')?.textContent || '';
+                const productividadText = fila.querySelector('td:nth-child(8) span')?.textContent || '0%';
+                const productividad = parseFloat(productividadText);
+
+                let mostrar = true;
+
+                // Filtro por nombre
+                if (nombreFiltro && !nombre.includes(nombreFiltro)) {
+                    mostrar = false;
+                }
+
+                // Filtro por supervisor
+                if (supervisorFiltro) {
+                    const supervisor = usuarios.find(u => u.id == supervisorFiltro);
+                    if (supervisor && !supervisorCell.includes(supervisor.nombre)) {
+                        mostrar = false;
+                    }
+                }
+
+                // Filtro por estado de rendimiento
+                if (estadoFiltro) {
+                    if (estadoFiltro === 'alto' && productividad < 80) mostrar = false;
+                    if (estadoFiltro === 'medio' && (productividad < 50 || productividad >= 80)) mostrar = false;
+                    if (estadoFiltro === 'bajo' && productividad >= 50) mostrar = false;
+                }
+
+                fila.style.display = mostrar ? '' : 'none';
+            });
+        }
+
+        function verDetalleTecnico(tecnicoId) {
+            const tecnico = usuarios.find(u => u.id === tecnicoId);
+            const tareasDelTecnico = tareas.filter(t => t.tecnico_id === tecnicoId);
+            const supervisor = usuarios.find(u => u.id === tecnico.supervisor);
+
+            const total = tareasDelTecnico.length;
+            const finalizadas = tareasDelTecnico.filter(t => t.estado === 'FINALIZADO').length;
+            const enProceso = tareasDelTecnico.filter(t => t.estado === 'EN PROCESO').length;
+            const observadas = tareasDelTecnico.filter(t => t.estado === 'OBSERVADO').length;
+            const promedioAvance = total > 0 ? (tareasDelTecnico.reduce((acc, tarea) => acc + parseFloat(calcularPorcentajeAvance(tarea)), 0) / total).toFixed(1) : 0;
+
+            const detalleTareas = tareasDelTecnico.map(tarea => 
+                `• ${tarea.tarea} - ${tarea.departamento}, ${tarea.municipio} (${calcularPorcentajeAvance(tarea)}% - ${tarea.estado})`
+            ).join('\n');
+
+            alert(`
+📊 DETALLE COMPLETO DEL TÉCNICO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+👤 Técnico: ${tecnico.nombre}
+👨‍💼 Supervisor: ${supervisor ? supervisor.nombre : 'N/A'}
+
+📈 ESTADÍSTICAS:
+• Total de tareas: ${total}
+• Finalizadas: ${finalizadas}
+• En proceso: ${enProceso}
+• Observadas: ${observadas}
+• Promedio de avance: ${promedioAvance}%
+• Productividad: ${total > 0 ? ((finalizadas / total) * 100).toFixed(1) : 0}%
+
+📋 TAREAS ASIGNADAS:
+${detalleTareas || 'No tiene tareas asignadas'}
+
+📅 Última actualización: ${new Date().toLocaleString()}
+            `);
+        }
+
+        // Funciones de gestión de tareas
+        function abrirModalTarea() {
+            tareaEditando = null;
+            document.getElementById('modal-titulo').textContent = 'Nueva Tarea';
+            limpiarFormularioTarea();
+            document.getElementById('tarea-fecha').value = new Date().toISOString().split('T')[0];
+            document.getElementById('modal-tarea').classList.remove('hidden');
+        }
+
+        function editarTarea(id) {
+            tareaEditando = tareas.find(t => t.id === id);
+            if (!tareaEditando) return;
+            
+            document.getElementById('modal-titulo').textContent = 'Editar Tarea';
+            
+            // Llenar el formulario
+            document.getElementById('tarea-fecha').value = tareaEditando.fecha;
+            document.getElementById('tarea-supervisor').value = getNombreUsuario(tareaEditando.supervisor_id);
+            document.getElementById('tarea-tecnico').value = getNombreUsuario(tareaEditando.tecnico_id);
+            document.getElementById('tarea-departamento').value = tareaEditando.departamento;
+            document.getElementById('tarea-municipio').value = tareaEditando.municipio;
+            document.getElementById('tarea-descripcion').value = tareaEditando.tarea;
+            document.getElementById('tarea-dificultad').value = tareaEditando.dificultad;
+            document.getElementById('tarea-carga').value = tareaEditando.cargaTotal;
+            document.getElementById('tarea-estado').value = tareaEditando.estado;
+            
+            // Llenar avances
+            for (let i = 1; i <= 6; i++) {
+                document.getElementById('avance-' + i).value = tareaEditando.avances[i-1] || 0;
+            }
+            
+            document.getElementById('modal-tarea').classList.remove('hidden');
+        }
+
+        function cerrarModalTarea() {
+            document.getElementById('modal-tarea').classList.add('hidden');
+            tareaEditando = null;
+        }
+
+        function limpiarFormularioTarea() {
+            document.getElementById('tarea-supervisor').value = '';
+            document.getElementById('tarea-tecnico').value = '';
+            document.getElementById('tarea-departamento').value = '';
+            document.getElementById('tarea-municipio').value = '';
+            document.getElementById('tarea-descripcion').value = '';
+            document.getElementById('tarea-dificultad').value = 'MEDIO';
+            document.getElementById('tarea-carga').value = '';
+            document.getElementById('tarea-estado').value = 'EN PROCESO';
+            
+            for (let i = 1; i <= 6; i++) {
+                document.getElementById('avance-' + i).value = 0;
+            }
+        }
+
+        function guardarTarea() {
+            const supervisorNombre = document.getElementById('tarea-supervisor').value.toUpperCase();
+            const tecnicoNombre = document.getElementById('tarea-tecnico').value.toUpperCase();
+            
+            const supervisor = usuarios.find(u => u.nombre === supervisorNombre);
+            const tecnico = usuarios.find(u => u.nombre === tecnicoNombre);
+            
+            if (!supervisor || !tecnico) {
+                alert('Error: Supervisor o técnico no encontrado');
+                return;
+            }
+            
+            const avances = [];
+            for (let i = 1; i <= 6; i++) {
+                avances.push(parseInt(document.getElementById('avance-' + i).value) || 0);
+            }
+            
+            const tarea = {
+                id: tareaEditando ? tareaEditando.id : Date.now(),
+                fecha: document.getElementById('tarea-fecha').value,
+                tecnico_id: tecnico.id,
+                supervisor_id: supervisor.id,
+                departamento: document.getElementById('tarea-departamento').value,
+                municipio: document.getElementById('tarea-municipio').value,
+                tarea: document.getElementById('tarea-descripcion').value,
+                dificultad: document.getElementById('tarea-dificultad').value,
+                cargaTotal: parseInt(document.getElementById('tarea-carga').value),
+                avances: avances,
+                estado: document.getElementById('tarea-estado').value,
+                fecha_creacion: tareaEditando ? tareaEditando.fecha_creacion : new Date().toISOString(),
+                ultima_actualizacion: new Date().toISOString()
+            };
+            
+            if (tareaEditando) {
+                const index = tareas.findIndex(t => t.id === tareaEditando.id);
+                tareas[index] = tarea;
+            } else {
+                tareas.push(tarea);
+            }
+            
+            // Guardar en localStorage
+            localStorage.setItem('crm-integrado-tareas', JSON.stringify(tareas));
+            
+            cerrarModalTarea();
+            actualizarDashboard();
+            
+            alert('Tarea guardada correctamente');
+        }
+
+        function eliminarTarea(id) {
+            if (confirm('¿Estás seguro de eliminar esta tarea?')) {
+                tareas = tareas.filter(t => t.id !== id);
+                localStorage.setItem('crm-integrado-tareas', JSON.stringify(tareas));
+                actualizarDashboard();
+                alert('Tarea eliminada correctamente');
+            }
+        }
+
+        // Configurar autocompletado
+        function configurarAutocompletado() {
+            configurarCampoAutocompletado('tarea-supervisor', () => {
+                return [...new Set(usuarios.filter(u => u.rol === 'SUPERVISOR').map(u => u.nombre))];
+            });
+            
+            configurarCampoAutocompletado('tarea-tecnico', () => {
+                return [...new Set(usuarios.filter(u => u.rol === 'TECNICO').map(u => u.nombre))];
+            });
+            
+            configurarCampoAutocompletado('tarea-departamento', () => departamentos);
+            
+            configurarCampoAutocompletado('tarea-municipio', () => {
+                const deptSeleccionado = document.getElementById('tarea-departamento').value;
+                if (!deptSeleccionado) return [];
+                const municipios = ['SUCRE', 'LA PAZ', 'SANTA CRUZ', 'COCHABAMBA', 'POTOSI', 'ORURO', 'TARIJA', 'TRINIDAD', 'COBIJA', 'PALOS BLANCOS', 'PUNA', 'SANTIAGO DE HUATA'];
+                return municipios;
+            });
+            
+            configurarCampoAutocompletado('tarea-descripcion', () => tareasComunes);
+        }
+
+        function configurarCampoAutocompletado(inputId, getSuggestions) {
+            const input = document.getElementById(inputId);
+            const lista = document.getElementById('lista-' + inputId.split('-')[1] + 's');
+            
+            if (!input || !lista) return;
+            
+            input.addEventListener('input', function() {
+                const valor = this.value.toLowerCase();
+                const sugerencias = getSuggestions().filter(s => 
+                    s.toLowerCase().includes(valor)
+                ).slice(0, 8);
+                
+                mostrarSugerencias(lista, sugerencias, input);
+            });
+            
+            input.addEventListener('focus', function() {
+                const sugerencias = getSuggestions().slice(0, 8);
+                mostrarSugerencias(lista, sugerencias, input);
+            });
+            
+            input.addEventListener('blur', function() {
+                setTimeout(() => lista.style.display = 'none', 200);
+            });
+        }
+
+        function mostrarSugerencias(lista, sugerencias, input) {
+            lista.innerHTML = '';
+            
+            if (sugerencias.length > 0) {
+                sugerencias.forEach(sugerencia => {
+                    const item = document.createElement('div');
+                    item.className = 'autocomplete-item';
+                    item.textContent = sugerencia;
+                    item.addEventListener('click', function() {
+                        input.value = sugerencia;
+                        lista.style.display = 'none';
+                        
+                        // Si es departamento, limpiar municipio
+                        if (input.id === 'tarea-departamento') {
+                            document.getElementById('tarea-municipio').value = '';
+                        }
+                    });
+                    lista.appendChild(item);
+                });
+                lista.style.display = 'block';
+            } else {
+                lista.style.display = 'none';
+            }
+        }
+
+        // Funciones de exportación
+        function exportarTodosReportes() {
+            const wb = XLSX.utils.book_new();
+
+            // Reporte general
+            const datosGenerales = [
+                ['Métrica', 'Valor'],
+                ['Total Tareas', tareas.length],
+                ['Finalizadas', tareas.filter(t => t.estado === 'FINALIZADO').length],
+                ['En Proceso', tareas.filter(t => t.estado === 'EN PROCESO').length],
+                ['Observadas', tareas.filter(t => t.estado === 'OBSERVADO').length],
+                ['Avance Promedio (%)', (tareas.reduce((acc, tarea) => acc + parseFloat(calcularPorcentajeAvance(tarea)), 0) / tareas.length).toFixed(1)]
+            ];
+            const wsGeneral = XLSX.utils.aoa_to_sheet(datosGenerales);
+            XLSX.utils.book_append_sheet(wb, wsGeneral, 'Resumen General');
+
+            // Reporte por técnico
+            const datosTecnicos = [['Técnico', 'Supervisor', 'Total Tareas', 'Finalizadas', 'En Proceso', 'Observadas', 'Avance Promedio %', 'Productividad %']];
+            usuarios.filter(u => u.rol === 'TECNICO').forEach(tecnico => {
+                const tareasDelTecnico = tareas.filter(t => t.tecnico_id === tecnico.id);
+                const supervisor = usuarios.find(u => u.id === tecnico.supervisor);
+                const total = tareasDelTecnico.length;
+                const finalizadas = tareasDelTecnico.filter(t => t.estado === 'FINALIZADO').length;
+                const enProceso = tareasDelTecnico.filter(t => t.estado === 'EN PROCESO').length;
+                const observadas = tareasDelTecnico.filter(t => t.estado === 'OBSERVADO').length;
+                const promedioAvance = total > 0 ? (tareasDelTecnico.reduce((acc, tarea) => acc + parseFloat(calcularPorcentajeAvance(tarea)), 0) / total).toFixed(1) : 0;
+                const productividad = total > 0 ? ((finalizadas / total) * 100).toFixed(1) : 0;
+
+                datosTecnicos.push([
+                    tecnico.nombre,
+                    supervisor ? supervisor.nombre : 'N/A',
+                    total,
+                    finalizadas,
+                    enProceso,
+                    observadas,
+                    promedioAvance,
+                    productividad
+                ]);
+            });
+            const wsTecnicos = XLSX.utils.aoa_to_sheet(datosTecnicos);
+            XLSX.utils.book_append_sheet(wb, wsTecnicos, 'Por Técnico');
+
+            // Reporte por supervisor
+            const datosSupervisores = [['Supervisor', 'Técnicos en Equipo', 'Total Tareas', 'Finalizadas', 'Avance Promedio %']];
+            usuarios.filter(u => u.rol === 'SUPERVISOR').forEach(supervisor => {
+                const tecnicosDelSupervisor = usuarios.filter(u => u.supervisor === supervisor.id);
+                const tareasDelEquipo = tareas.filter(t => tecnicosDelSupervisor.some(tec => tec.id === t.tecnico_id));
+                const total = tareasDelEquipo.length;
+                const finalizadas = tareasDelEquipo.filter(t => t.estado === 'FINALIZADO').length;
+                const promedioEquipo = total > 0 ? (tareasDelEquipo.reduce((acc, tarea) => acc + parseFloat(calcularPorcentajeAvance(tarea)), 0) / total).toFixed(1) : 0;
+
+                datosSupervisores.push([
+                    supervisor.nombre,
+                    tecnicosDelSupervisor.length,
+                    total,
+                    finalizadas,
+                    promedioEquipo
+                ]);
+            });
+            const wsSupervisores = XLSX.utils.aoa_to_sheet(datosSupervisores);
+            XLSX.utils.book_append_sheet(wb, wsSupervisores, 'Por Supervisor');
+
+            // Reporte detallado de todas las tareas
+            const datosDetallados = [['ID', 'Fecha', 'Técnico', 'Supervisor', 'Departamento', 'Municipio', 'Tarea', 'Dificultad', 'Carga Total', 'Avance %', 'Estado']];
+            tareas.forEach(tarea => {
+                const tecnico = getNombreUsuario(tarea.tecnico_id);
+                const supervisor = getNombreUsuario(tarea.supervisor_id);
+                const avance = calcularPorcentajeAvance(tarea);
+
+                datosDetallados.push([
+                    tarea.id,
+                    tarea.fecha,
+                    tecnico,
+                    supervisor,
+                    tarea.departamento,
+                    tarea.municipio,
+                    tarea.tarea,
+                    tarea.dificultad,
+                    tarea.cargaTotal,
+                    avance,
+                    tarea.estado
+                ]);
+            });
+            const wsDetallado = XLSX.utils.aoa_to_sheet(datosDetallados);
+            XLSX.utils.book_append_sheet(wb, wsDetallado, 'Todas las Tareas');
+
+            // Descargar archivo
+            const fecha = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(wb, `CRM_Bolivia_Reporte_Completo_${fecha}.xlsx`);
+            
+            alert('Reporte completo exportado correctamente');
+        }
+
+        function exportarReporteTecnicos() {
+            const wb = XLSX.utils.book_new();
+            const datos = [['Técnico', 'Supervisor', 'Total Tareas', 'Finalizadas', 'En Proceso', 'Observadas', 'Avance Promedio %', 'Productividad %', 'Última Actividad']];
+
+            usuarios.filter(u => u.rol === 'TECNICO').forEach(tecnico => {
+                const tareasDelTecnico = tareas.filter(t => t.tecnico_id === tecnico.id);
+                const supervisor = usuarios.find(u => u.id === tecnico.supervisor);
+                const total = tareasDelTecnico.length;
+                const finalizadas = tareasDelTecnico.filter(t => t.estado === 'FINALIZADO').length;
+                const enProceso = tareasDelTecnico.filter(t => t.estado === 'EN PROCESO').length;
+                const observadas = tareasDelTecnico.filter(t => t.estado === 'OBSERVADO').length;
+                const promedioAvance = total > 0 ? (tareasDelTecnico.reduce((acc, tarea) => acc + parseFloat(calcularPorcentajeAvance(tarea)), 0) / total).toFixed(1) : 0;
+                const productividad = total > 0 ? ((finalizadas / total) * 100).toFixed(1) : 0;
+                const ultimaActividad = tareasDelTecnico.length > 0 ? new Date(Math.max(...tareasDelTecnico.map(t => new Date(t.ultima_actualizacion)))).toLocaleDateString() : 'N/A';
+
+                datos.push([
+                    tecnico.nombre,
+                    supervisor ? supervisor.nombre : 'N/A',
+                    total,
+                    finalizadas,
+                    enProceso,
+                    observadas,
+                    promedioAvance,
+                    productividad,
+                    ultimaActividad
+                ]);
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(datos);
+            XLSX.utils.book_append_sheet(wb, ws, 'Reporte Técnicos');
+
+            const fecha = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(wb, `CRM_Bolivia_Reporte_Tecnicos_${fecha}.xlsx`);
+            
+            alert('Reporte de técnicos exportado correctamente');
+        }
+
+        // Cerrar modal al hacer clic fuera
+        window.addEventListener('click', function(e) {
+            const modal = document.getElementById('modal-tarea');
+            if (e.target === modal) {
+                cerrarModalTarea();
+            }
+        });
+
+        // Inicializar aplicación
+        document.addEventListener('DOMContentLoaded', inicializar);
+    </script>
+</body>
+</html>
