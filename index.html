@@ -7,6 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN2GGZk=" crossorigin=""></script>
     <style>
         .fade-in { animation: fadeIn 0.5s; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -45,6 +47,38 @@
         }
         .autocomplete-item:last-child {
             border-bottom: none;
+        }
+        #mapa-bolivia { height: 100%; width: 100%; border-radius: 8px; z-index: 1; }
+        .leaflet-dept-label {
+            background: transparent;
+            border: none;
+            text-align: center;
+            pointer-events: none;
+        }
+        .dept-label-inner {
+            font-size: 11px;
+            font-weight: bold;
+            color: #1f2937;
+            text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff;
+            white-space: nowrap;
+        }
+        .geo-stat-card {
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .geo-stat-card:hover { background: #eff6ff; }
+        .geo-stat-card.activo { background: #dbeafe; border-left: 3px solid #2563eb; }
+        .geo-legend {
+            position: absolute;
+            bottom: 30px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px 14px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            font-size: 12px;
+            min-width: 150px;
         }
     </style>
 </head>
@@ -205,6 +239,9 @@
                     <button onclick="cambiarTab('alertas')" id="tab-alertas" class="px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
                         🚨 Alertas
                     </button>
+                    <button onclick="cambiarTab('geovisor')" id="tab-geovisor" class="px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                        🌍 Geovisor
+                    </button>
                     <button onclick="cambiarTab('gestion')" id="tab-gestion" class="px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
                         ⚙️ Gestión
                     </button>
@@ -364,6 +401,112 @@
                         <h3 class="text-lg font-semibold mb-4">📊 Comparativa de Rendimiento por Técnico</h3>
                         <div style="height: 400px;">
                             <canvas id="chart-tecnicos-comparativa"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB GEOVISOR -->
+                <div id="content-geovisor" class="hidden fade-in">
+                    <!-- Barra de filtros -->
+                    <div class="bg-white p-4 rounded-lg shadow mb-4">
+                        <div class="flex flex-wrap items-center gap-4">
+                            <h2 class="text-lg font-bold text-gray-800">🌍 Geovisor - Distribución Geográfica de Tareas</h2>
+                            <div class="flex items-center gap-2 ml-auto">
+                                <label class="text-sm font-medium text-gray-600">Estado:</label>
+                                <select id="geo-filtro-estado" onchange="actualizarGeovisor()" class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="TODOS">Todos los estados</option>
+                                    <option value="EN PROCESO">En Proceso</option>
+                                    <option value="FINALIZADO">Finalizado</option>
+                                    <option value="OBSERVADO">Observado</option>
+                                </select>
+                                <label class="text-sm font-medium text-gray-600">Mostrar:</label>
+                                <select id="geo-modo" onchange="actualizarGeovisor()" class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="avance">% Avance</option>
+                                    <option value="cantidad">Cantidad Tareas</option>
+                                    <option value="estado">Por Estado</option>
+                                </select>
+                                <button onclick="reiniciarVistaGeovisor()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm">
+                                    🔄 Reiniciar Vista
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contenido principal del geovisor -->
+                    <div class="flex gap-4" style="height: 650px;">
+                        <!-- Panel izquierdo: estadísticas por departamento -->
+                        <div class="w-72 flex-shrink-0 bg-white rounded-lg shadow flex flex-col">
+                            <div class="p-4 border-b">
+                                <h3 class="font-semibold text-gray-800">📊 Estadísticas por Departamento</h3>
+                                <p class="text-xs text-gray-500 mt-1">Haz clic en un departamento para ver detalles</p>
+                            </div>
+                            <div id="geo-stats-lista" class="flex-1 overflow-y-auto divide-y divide-gray-100">
+                                <!-- Se llena dinámicamente -->
+                            </div>
+                            <!-- Panel de detalle del departamento seleccionado -->
+                            <div id="geo-detalle-panel" class="hidden border-t p-4 bg-blue-50">
+                                <h4 id="geo-detalle-titulo" class="font-bold text-blue-800 mb-3"></h4>
+                                <div id="geo-detalle-contenido" class="space-y-2 text-sm"></div>
+                            </div>
+                        </div>
+
+                        <!-- Mapa principal -->
+                        <div class="flex-1 bg-white rounded-lg shadow relative overflow-hidden">
+                            <div id="mapa-bolivia"></div>
+                            <!-- Leyenda superpuesta -->
+                            <div class="geo-legend" id="geo-leyenda">
+                                <div class="font-semibold text-gray-700 mb-2">Leyenda</div>
+                                <div id="geo-leyenda-contenido">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <div style="width:14px;height:14px;border-radius:50%;background:#16a34a;"></div>
+                                        <span>80-100% avance</span>
+                                    </div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <div style="width:14px;height:14px;border-radius:50%;background:#d97706;"></div>
+                                        <span>50-79% avance</span>
+                                    </div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <div style="width:14px;height:14px;border-radius:50%;background:#dc2626;"></div>
+                                        <span>20-49% avance</span>
+                                    </div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <div style="width:14px;height:14px;border-radius:50%;background:#6b7280;"></div>
+                                        <span>0-19% avance</span>
+                                    </div>
+                                    <hr class="my-2"/>
+                                    <div class="text-xs text-gray-500">Tamaño = cantidad de tareas</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Panel derecho: técnicos por zona -->
+                        <div class="w-64 flex-shrink-0 bg-white rounded-lg shadow flex flex-col">
+                            <div class="p-4 border-b">
+                                <h3 class="font-semibold text-gray-800">👷 Técnicos por Zona</h3>
+                            </div>
+                            <div id="geo-tecnicos-zona" class="flex-1 overflow-y-auto divide-y divide-gray-100 text-sm">
+                                <!-- Se llena dinámicamente -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- KPIs resumen geovisor -->
+                    <div class="grid grid-cols-4 gap-4 mt-4">
+                        <div class="bg-white p-4 rounded-lg shadow text-center">
+                            <div class="text-2xl font-bold text-blue-600" id="geo-kpi-depto-top">-</div>
+                            <div class="text-xs text-gray-500 mt-1">Depto. Más Activo</div>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow text-center">
+                            <div class="text-2xl font-bold text-green-600" id="geo-kpi-avance-max">-</div>
+                            <div class="text-xs text-gray-500 mt-1">Mayor Avance</div>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow text-center">
+                            <div class="text-2xl font-bold text-red-600" id="geo-kpi-avance-min">-</div>
+                            <div class="text-xs text-gray-500 mt-1">Menor Avance</div>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow text-center">
+                            <div class="text-2xl font-bold text-purple-600" id="geo-kpi-deptos-activos">-</div>
+                            <div class="text-xs text-gray-500 mt-1">Departamentos Activos</div>
                         </div>
                     </div>
                 </div>
@@ -940,6 +1083,9 @@
                 case 'gestion':
                     actualizarGestion();
                     break;
+                case 'geovisor':
+                    actualizarGeovisor();
+                    break;
                 // Aquí van los otros casos...
             }
         }
@@ -1058,7 +1204,7 @@
         // Funciones para administrador
         function cambiarTab(tab) {
             // Ocultar todos los contenidos
-            ['general', 'tecnicos', 'supervisores', 'tareas', 'ubicaciones', 'fechas', 'comparativas', 'alertas', 'gestion'].forEach(t => {
+            ['general', 'tecnicos', 'supervisores', 'tareas', 'ubicaciones', 'fechas', 'comparativas', 'alertas', 'geovisor', 'gestion'].forEach(t => {
                 const content = document.getElementById('content-' + t);
                 const tabBtn = document.getElementById('tab-' + t);
                 if (content) content.classList.add('hidden');
@@ -1079,6 +1225,9 @@
 
             tabActual = tab;
             actualizarDashboard();
+            if (tab === 'geovisor') {
+                setTimeout(() => inicializarGeovisor(), 50);
+            }
         }
 
         function actualizarResumenGeneral() {
@@ -1837,6 +1986,337 @@ ${detalleTareas || 'No tiene tareas asignadas'}
 
         // Inicializar aplicación
         document.addEventListener('DOMContentLoaded', inicializar);
+
+        // ===================== GEOVISOR =====================
+        let mapaBolivia = null;
+        let capasDepartamentos = {};
+        let capasEtiquetas = [];
+        let capasMunicipios = [];
+        let deptSeleccionado = null;
+
+        const DEPT_CENTROIDS = {
+            'CHUQUISACA': [-19.03, -65.26],
+            'LA PAZ':     [-16.50, -68.15],
+            'COCHABAMBA': [-17.39, -66.16],
+            'ORURO':      [-17.96, -67.11],
+            'POTOSI':     [-19.58, -65.75],
+            'TARIJA':     [-21.54, -64.73],
+            'SANTA CRUZ': [-17.78, -63.18],
+            'BENI':       [-14.83, -65.38],
+            'PANDO':      [-11.00, -68.77]
+        };
+
+        const MUNICIPIO_COORDS = {
+            'SUCRE':               [-19.04, -65.26],
+            'LA PAZ':              [-16.50, -68.15],
+            'SANTA CRUZ':          [-17.78, -63.18],
+            'COCHABAMBA':          [-17.39, -66.16],
+            'POTOSI':              [-19.58, -65.75],
+            'ORURO':               [-17.96, -67.11],
+            'TARIJA':              [-21.54, -64.73],
+            'TRINIDAD':            [-14.83, -64.90],
+            'COBIJA':              [-11.03, -68.77],
+            'PALOS BLANCOS':       [-15.97, -67.06],
+            'PUNA':                [-19.85, -65.47],
+            'SANTIAGO DE HUATA':   [-15.97, -68.86]
+        };
+
+        function getColorPorAvance(avance) {
+            if (avance >= 80) return '#16a34a';
+            if (avance >= 50) return '#d97706';
+            if (avance >= 20) return '#dc2626';
+            return '#6b7280';
+        }
+
+        function getColorPorEstado(finalizadas, enProceso, observadas, total) {
+            if (total === 0) return '#6b7280';
+            const pctFin = (finalizadas / total) * 100;
+            if (pctFin >= 70) return '#16a34a';
+            if (enProceso > observadas) return '#2563eb';
+            if (observadas > 0) return '#dc2626';
+            return '#d97706';
+        }
+
+        function inicializarGeovisor() {
+            if (!mapaBolivia) {
+                mapaBolivia = L.map('mapa-bolivia', {
+                    center: [-16.0, -64.5],
+                    zoom: 6,
+                    zoomControl: true
+                });
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | INE Bolivia',
+                    maxZoom: 18
+                }).addTo(mapaBolivia);
+            } else {
+                mapaBolivia.invalidateSize();
+            }
+            actualizarGeovisor();
+        }
+
+        function limpiarCapasGeovisor() {
+            Object.values(capasDepartamentos).forEach(c => { if (mapaBolivia.hasLayer(c)) mapaBolivia.removeLayer(c); });
+            capasDepartamentos = {};
+            capasEtiquetas.forEach(c => { if (mapaBolivia.hasLayer(c)) mapaBolivia.removeLayer(c); });
+            capasEtiquetas = [];
+            capasMunicipios.forEach(c => { if (mapaBolivia.hasLayer(c)) mapaBolivia.removeLayer(c); });
+            capasMunicipios = [];
+        }
+
+        function crearPopupDepartamento(dept, datos, avance) {
+            return `
+                <div style="min-width:220px; font-family:sans-serif;">
+                    <div style="font-weight:bold;font-size:14px;color:#1e40af;border-bottom:2px solid #2563eb;padding-bottom:6px;margin-bottom:8px;">
+                        📍 ${dept}
+                    </div>
+                    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+                        <tr><td style="padding:3px 0;color:#6b7280;">Total Tareas</td><td style="font-weight:bold;text-align:right;">${datos.tareas.length}</td></tr>
+                        <tr><td style="padding:3px 0;color:#6b7280;">Avance Promedio</td><td style="font-weight:bold;text-align:right;color:${getColorPorAvance(avance)};">${avance.toFixed(1)}%</td></tr>
+                        <tr><td style="padding:3px 0;color:#16a34a;">✅ Finalizadas</td><td style="font-weight:bold;text-align:right;">${datos.finalizadas}</td></tr>
+                        <tr><td style="padding:3px 0;color:#2563eb;">🔄 En Proceso</td><td style="font-weight:bold;text-align:right;">${datos.enProceso}</td></tr>
+                        <tr><td style="padding:3px 0;color:#dc2626;">⚠️ Observadas</td><td style="font-weight:bold;text-align:right;">${datos.observadas}</td></tr>
+                        <tr><td style="padding:3px 0;color:#6b7280;">Técnicos</td><td style="font-weight:bold;text-align:right;">${datos.tecnicosNombres.length}</td></tr>
+                    </table>
+                    <div style="margin-top:8px;background:#f3f4f6;border-radius:4px;height:8px;">
+                        <div style="height:8px;border-radius:4px;background:${getColorPorAvance(avance)};width:${avance.toFixed(0)}%;"></div>
+                    </div>
+                </div>`;
+        }
+
+        function seleccionarDepartamento(dept, datos, avance) {
+            deptSeleccionado = dept;
+            // Resaltar en mapa
+            Object.entries(capasDepartamentos).forEach(([d, c]) => {
+                c.setStyle({ weight: d === dept ? 4 : 2, opacity: d === dept ? 1 : 0.7 });
+            });
+            // Resaltar en lista
+            document.querySelectorAll('.geo-stat-card').forEach(el => {
+                el.classList.toggle('activo', el.dataset.dept === dept);
+            });
+            // Panel de detalle
+            const panel = document.getElementById('geo-detalle-panel');
+            const titulo = document.getElementById('geo-detalle-titulo');
+            const contenido = document.getElementById('geo-detalle-contenido');
+            panel.classList.remove('hidden');
+            titulo.textContent = '📍 ' + dept;
+
+            const tecnicosLista = datos.tecnicosNombres.slice(0, 5).join(', ') + (datos.tecnicosNombres.length > 5 ? ` +${datos.tecnicosNombres.length - 5}` : '');
+            contenido.innerHTML = `
+                <div class="flex justify-between"><span class="text-gray-500">Total tareas:</span><span class="font-bold">${datos.tareas.length}</span></div>
+                <div class="flex justify-between"><span class="text-gray-500">Avance:</span><span class="font-bold" style="color:${getColorPorAvance(avance)};">${avance.toFixed(1)}%</span></div>
+                <div class="flex justify-between"><span class="text-gray-500">✅ Finalizadas:</span><span class="font-bold text-green-700">${datos.finalizadas}</span></div>
+                <div class="flex justify-between"><span class="text-gray-500">🔄 En Proceso:</span><span class="font-bold text-blue-700">${datos.enProceso}</span></div>
+                <div class="flex justify-between"><span class="text-gray-500">⚠️ Observadas:</span><span class="font-bold text-red-700">${datos.observadas}</span></div>
+                <div class="mt-2 pt-2 border-t"><span class="text-gray-500 text-xs">Técnicos:</span><div class="text-xs mt-1 text-gray-700">${tecnicosLista || 'Ninguno'}</div></div>
+            `;
+        }
+
+        function actualizarPanelEstadisticas(datosPorDepto) {
+            const lista = document.getElementById('geo-stats-lista');
+            if (!lista) return;
+            const ordenados = Object.entries(datosPorDepto)
+                .sort((a, b) => b[1].tareas.length - a[1].tareas.length);
+            lista.innerHTML = ordenados.map(([dept, datos]) => {
+                const avance = datos.avance;
+                const color = getColorPorAvance(avance);
+                return `
+                <div class="geo-stat-card p-3" data-dept="${dept}" onclick="seleccionarDepartamento('${dept}', geoDataCache['${dept}'], ${avance})">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs font-semibold text-gray-700">${dept}</span>
+                        <span class="text-xs font-bold" style="color:${color};">${avance.toFixed(0)}%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-1.5 mb-1">
+                        <div class="h-1.5 rounded-full" style="width:${avance.toFixed(0)}%;background:${color};"></div>
+                    </div>
+                    <div class="flex gap-2 text-xs text-gray-500">
+                        <span>${datos.tareas.length} tareas</span>
+                        <span>·</span>
+                        <span class="text-green-600">${datos.finalizadas} fin.</span>
+                        <span>·</span>
+                        <span class="text-red-600">${datos.observadas} obs.</span>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // Cache global para acceso desde onclick inline en panel de estadísticas
+        let geoDataCache = {};
+
+        function actualizarGeovisor() {
+            if (!mapaBolivia) return;
+            limpiarCapasGeovisor();
+
+            const filtroEstado = document.getElementById('geo-filtro-estado')?.value || 'TODOS';
+            const modo = document.getElementById('geo-modo')?.value || 'avance';
+
+            let tareasFiltradas = tareas;
+            if (filtroEstado !== 'TODOS') {
+                tareasFiltradas = tareas.filter(t => t.estado === filtroEstado);
+            }
+
+            const datosPorDepto = {};
+            departamentos.forEach(dept => {
+                const td = tareasFiltradas.filter(t => t.departamento === dept);
+                const finalizadas = td.filter(t => t.estado === 'FINALIZADO').length;
+                const enProceso  = td.filter(t => t.estado === 'EN PROCESO').length;
+                const observadas = td.filter(t => t.estado === 'OBSERVADO').length;
+                const avance = td.length > 0
+                    ? td.reduce((acc, t) => acc + parseFloat(calcularPorcentajeAvance(t)), 0) / td.length
+                    : 0;
+                const tecnicosIds = [...new Set(td.map(t => t.tecnico_id))];
+                const tecnicosNombres = tecnicosIds.map(id => getNombreUsuario(id));
+                datosPorDepto[dept] = { tareas: td, finalizadas, enProceso, observadas, avance, tecnicosNombres };
+            });
+
+            // Guardar en cache global
+            geoDataCache = datosPorDepto;
+
+            const maxTareas = Math.max(1, ...Object.values(datosPorDepto).map(d => d.tareas.length));
+
+            departamentos.forEach(dept => {
+                const centroid = DEPT_CENTROIDS[dept];
+                if (!centroid) return;
+                const datos = datosPorDepto[dept];
+                const total = datos.tareas.length;
+                const avance = datos.avance;
+
+                let color;
+                if (modo === 'avance') {
+                    color = getColorPorAvance(avance);
+                } else if (modo === 'estado') {
+                    color = getColorPorEstado(datos.finalizadas, datos.enProceso, datos.observadas, total);
+                } else {
+                    const pct = total / maxTareas;
+                    color = pct >= 0.7 ? '#1d4ed8' : pct >= 0.4 ? '#2563eb' : pct >= 0.1 ? '#93c5fd' : '#dbeafe';
+                }
+
+                const radiusMetros = total === 0
+                    ? 15000
+                    : Math.max(25000, Math.min(90000, 20000 + (total / maxTareas) * 70000));
+
+                const circle = L.circle(centroid, {
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: 0.45,
+                    weight: 2,
+                    radius: radiusMetros
+                });
+
+                circle.bindPopup(crearPopupDepartamento(dept, datos, avance), { maxWidth: 280 });
+                circle.on('click', () => seleccionarDepartamento(dept, datos, avance));
+                circle.addTo(mapaBolivia);
+                capasDepartamentos[dept] = circle;
+
+                const etiqueta = L.marker(centroid, {
+                    icon: L.divIcon({
+                        className: 'leaflet-dept-label',
+                        html: `<div class="dept-label-inner">${dept.split(' ').map(w => w[0]+w.slice(1).toLowerCase()).join(' ')}<br/><span style="color:${color};font-size:12px;">${avance.toFixed(0)}%</span></div>`,
+                        iconSize: [110, 36],
+                        iconAnchor: [55, 18]
+                    }),
+                    interactive: false
+                });
+                etiqueta.addTo(mapaBolivia);
+                capasEtiquetas.push(etiqueta);
+            });
+
+            const municipiosEnDatos = [...new Set(tareasFiltradas.map(t => t.municipio))];
+            municipiosEnDatos.forEach(mun => {
+                const coord = MUNICIPIO_COORDS[mun];
+                if (!coord) return;
+                const tareasM = tareasFiltradas.filter(t => t.municipio === mun);
+                const avanceM = tareasM.reduce((acc, t) => acc + parseFloat(calcularPorcentajeAvance(t)), 0) / tareasM.length;
+                const marker = L.circleMarker(coord, {
+                    radius: 6,
+                    color: '#fff',
+                    fillColor: getColorPorAvance(avanceM),
+                    fillOpacity: 0.9,
+                    weight: 2
+                });
+                marker.bindTooltip(`<b>${mun}</b><br/>Tareas: ${tareasM.length}<br/>Avance: ${avanceM.toFixed(1)}%`);
+                marker.addTo(mapaBolivia);
+                capasMunicipios.push(marker);
+            });
+
+            actualizarPanelEstadisticas(datosPorDepto);
+            actualizarPanelTecnicosZona(datosPorDepto);
+            actualizarKpisGeovisor(datosPorDepto);
+            actualizarLeyenda(modo);
+        }
+
+        function actualizarPanelTecnicosZona(datosPorDepto) {
+            const panel = document.getElementById('geo-tecnicos-zona');
+            if (!panel) return;
+            const porDepto = Object.entries(datosPorDepto)
+                .filter(([, d]) => d.tecnicosNombres.length > 0)
+                .sort((a, b) => b[1].tecnicosNombres.length - a[1].tecnicosNombres.length);
+            panel.innerHTML = porDepto.map(([dept, datos]) => `
+                <div class="p-3">
+                    <div class="font-semibold text-gray-700 text-xs mb-1">${dept}</div>
+                    <div class="text-xs text-gray-500">${datos.tecnicosNombres.slice(0, 4).join(', ')}${datos.tecnicosNombres.length > 4 ? ` +${datos.tecnicosNombres.length - 4} más` : ''}</div>
+                    <div class="text-xs text-blue-600 mt-0.5">${datos.tecnicosNombres.length} técnico${datos.tecnicosNombres.length !== 1 ? 's' : ''}</div>
+                </div>
+            `).join('') || '<div class="p-4 text-gray-400 text-sm text-center">Sin datos</div>';
+        }
+
+        function actualizarKpisGeovisor(datosPorDepto) {
+            const ordenados = Object.entries(datosPorDepto)
+                .filter(([, d]) => d.tareas.length > 0)
+                .sort((a, b) => b[1].tareas.length - a[1].tareas.length);
+            const porAvance = Object.entries(datosPorDepto)
+                .filter(([, d]) => d.tareas.length > 0)
+                .sort((a, b) => b[1].avance - a[1].avance);
+
+            const elDeptoTop = document.getElementById('geo-kpi-depto-top');
+            const elAvanceMax = document.getElementById('geo-kpi-avance-max');
+            const elAvanceMin = document.getElementById('geo-kpi-avance-min');
+            const elActivos  = document.getElementById('geo-kpi-deptos-activos');
+
+            if (elDeptoTop) elDeptoTop.textContent = ordenados[0]?.[0]?.split(' ')[0] || '-';
+            if (elAvanceMax) elAvanceMax.textContent = porAvance[0] ? porAvance[0][1].avance.toFixed(0) + '%' : '-';
+            if (elAvanceMin) elAvanceMin.textContent = porAvance[porAvance.length - 1] ? porAvance[porAvance.length - 1][1].avance.toFixed(0) + '%' : '-';
+            if (elActivos)  elActivos.textContent = ordenados.length;
+        }
+
+        function actualizarLeyenda(modo) {
+            const contenido = document.getElementById('geo-leyenda-contenido');
+            if (!contenido) return;
+            if (modo === 'cantidad') {
+                contenido.innerHTML = `
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#1d4ed8;"></div><span>Alta cantidad</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#2563eb;"></div><span>Media</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#93c5fd;"></div><span>Baja</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#dbeafe;"></div><span>Sin tareas</span></div>
+                    <hr class="my-2"/><div class="text-xs text-gray-500">Tamaño = cantidad de tareas</div>`;
+            } else if (modo === 'estado') {
+                contenido.innerHTML = `
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#16a34a;"></div><span>&ge;70% finalizadas</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#2563eb;"></div><span>En proceso</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#dc2626;"></div><span>Con observadas</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#d97706;"></div><span>Mixto</span></div>
+                    <hr class="my-2"/><div class="text-xs text-gray-500">Tamaño = cantidad de tareas</div>`;
+            } else {
+                contenido.innerHTML = `
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#16a34a;"></div><span>80-100% avance</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#d97706;"></div><span>50-79% avance</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#dc2626;"></div><span>20-49% avance</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#6b7280;"></div><span>0-19% avance</span></div>
+                    <hr class="my-2"/><div class="text-xs text-gray-500">Tamaño = cantidad de tareas</div>`;
+            }
+        }
+
+        function reiniciarVistaGeovisor() {
+            if (mapaBolivia) {
+                mapaBolivia.setView([-16.0, -64.5], 6);
+                deptSeleccionado = null;
+                document.getElementById('geo-detalle-panel')?.classList.add('hidden');
+                Object.values(capasDepartamentos).forEach(c => c.setStyle({ weight: 2, opacity: 1 }));
+                document.querySelectorAll('.geo-stat-card').forEach(el => el.classList.remove('activo'));
+            }
+        }
+        // ===================== FIN GEOVISOR =====================
+
     </script>
 </body>
 </html>
