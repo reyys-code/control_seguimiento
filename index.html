@@ -48,7 +48,7 @@
         .autocomplete-item:last-child {
             border-bottom: none;
         }
-        #mapa-bolivia { height: 100%; width: 100%; border-radius: 8px; z-index: 1; }
+        #mapa-bolivia { position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: 8px; z-index: 1; }
         .leaflet-dept-label {
             background: transparent;
             border: none;
@@ -1223,7 +1223,7 @@
             tabActual = tab;
             actualizarDashboard();
             if (tab === 'geovisor') {
-                setTimeout(() => inicializarGeovisor(), 50);
+                setTimeout(() => inicializarGeovisor(), 100);
             }
         }
 
@@ -2046,9 +2046,8 @@ ${detalleTareas || 'No tiene tareas asignadas'}
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | INE Bolivia',
                     maxZoom: 18
                 }).addTo(mapaBolivia);
-            } else {
-                mapaBolivia.invalidateSize();
             }
+            mapaBolivia.invalidateSize();
             actualizarGeovisor();
         }
 
@@ -2140,18 +2139,11 @@ ${detalleTareas || 'No tiene tareas asignadas'}
         // Cache global para acceso desde onclick inline en panel de estadísticas
         let geoDataCache = {};
 
-        function actualizarGeovisor() {
-            if (!mapaBolivia) return;
-            limpiarCapasGeovisor();
-
-            const filtroEstado = document.getElementById('geo-filtro-estado')?.value || 'TODOS';
-            const modo = document.getElementById('geo-modo')?.value || 'avance';
-
+        function calcularDatosGeovisor(filtroEstado) {
             let tareasFiltradas = tareas;
-            if (filtroEstado !== 'TODOS') {
+            if (filtroEstado && filtroEstado !== 'TODOS') {
                 tareasFiltradas = tareas.filter(t => t.estado === filtroEstado);
             }
-
             const datosPorDepto = {};
             departamentos.forEach(dept => {
                 const td = tareasFiltradas.filter(t => t.departamento === dept);
@@ -2165,9 +2157,25 @@ ${detalleTareas || 'No tiene tareas asignadas'}
                 const tecnicosNombres = tecnicosIds.map(id => getNombreUsuario(id));
                 datosPorDepto[dept] = { tareas: td, finalizadas, enProceso, observadas, avance, tecnicosNombres };
             });
+            return { datosPorDepto, tareasFiltradas };
+        }
 
-            // Guardar en cache global
+        function actualizarGeovisor() {
+            const filtroEstado = document.getElementById('geo-filtro-estado')?.value || 'TODOS';
+            const modo = document.getElementById('geo-modo')?.value || 'avance';
+
+            const { datosPorDepto, tareasFiltradas } = calcularDatosGeovisor(filtroEstado);
             geoDataCache = datosPorDepto;
+
+            // Siempre actualizar paneles laterales y KPIs (no dependen del mapa)
+            actualizarPanelEstadisticas(datosPorDepto);
+            actualizarPanelTecnicosZona(datosPorDepto);
+            actualizarKpisGeovisor(datosPorDepto);
+            actualizarLeyenda(modo);
+
+            // Actualizar capas del mapa solo si está inicializado
+            if (!mapaBolivia) return;
+            limpiarCapasGeovisor();
 
             const maxTareas = Math.max(1, ...Object.values(datosPorDepto).map(d => d.tareas.length));
 
@@ -2235,11 +2243,6 @@ ${detalleTareas || 'No tiene tareas asignadas'}
                 marker.addTo(mapaBolivia);
                 capasMunicipios.push(marker);
             });
-
-            actualizarPanelEstadisticas(datosPorDepto);
-            actualizarPanelTecnicosZona(datosPorDepto);
-            actualizarKpisGeovisor(datosPorDepto);
-            actualizarLeyenda(modo);
         }
 
         function actualizarPanelTecnicosZona(datosPorDepto) {
