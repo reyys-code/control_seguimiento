@@ -7,6 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="libs/leaflet.css"/>
+    <script src="libs/leaflet.js"></script>
     <style>
         .fade-in { animation: fadeIn 0.5s; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -45,6 +47,40 @@
         }
         .autocomplete-item:last-child {
             border-bottom: none;
+        }
+        #bolivia-svg path { transition: filter 0.15s, opacity 0.15s; }
+        #bolivia-svg path:hover { filter: brightness(0.85); }
+        #bolivia-svg path.dept-activo { stroke: #1d4ed8 !important; stroke-width: 3 !important; }
+        .leaflet-dept-label {
+            background: transparent;
+            border: none;
+            text-align: center;
+            pointer-events: none;
+        }
+        .dept-label-inner {
+            font-size: 11px;
+            font-weight: bold;
+            color: #1f2937;
+            text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff;
+            white-space: nowrap;
+        }
+        .geo-stat-card {
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .geo-stat-card:hover { background: #eff6ff; }
+        .geo-stat-card.activo { background: #dbeafe; border-left: 3px solid #2563eb; }
+        .geo-legend {
+            position: absolute;
+            bottom: 30px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px 14px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            font-size: 12px;
+            min-width: 150px;
         }
     </style>
 </head>
@@ -193,7 +229,7 @@
                     <button onclick="cambiarTab('tareas')" id="tab-tareas" class="px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
                         📋 Por Tipo Tarea
                     </button>
-                    <button onclick="cambiarTab('ubicaciones')" id="tab-ubicaciones" class="px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                    <button onclick="cambiarTab('geovisor')" id="tab-geovisor" class="px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
                         🗺️ Por Ubicación
                     </button>
                     <button onclick="cambiarTab('fechas')" id="tab-fechas" class="px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 whitespace-nowrap">
@@ -364,6 +400,154 @@
                         <h3 class="text-lg font-semibold mb-4">📊 Comparativa de Rendimiento por Técnico</h3>
                         <div style="height: 400px;">
                             <canvas id="chart-tecnicos-comparativa"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB GEOVISOR -->
+                <div id="content-geovisor" class="hidden fade-in">
+                    <!-- Barra de filtros -->
+                    <div class="bg-white p-4 rounded-lg shadow mb-4">
+                        <div class="flex flex-wrap items-center gap-4">
+                            <h2 class="text-lg font-bold text-gray-800">🌍 Geovisor - Distribución Geográfica de Tareas</h2>
+                            <div class="flex items-center gap-2 ml-auto">
+                                <label class="text-sm font-medium text-gray-600">Estado:</label>
+                                <select id="geo-filtro-estado" onchange="actualizarGeovisor()" class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="TODOS">Todos los estados</option>
+                                    <option value="EN PROCESO">En Proceso</option>
+                                    <option value="FINALIZADO">Finalizado</option>
+                                    <option value="OBSERVADO">Observado</option>
+                                </select>
+                                <label class="text-sm font-medium text-gray-600">Mostrar:</label>
+                                <select id="geo-modo" onchange="actualizarGeovisor()" class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="avance">% Avance</option>
+                                    <option value="cantidad">Cantidad Tareas</option>
+                                    <option value="estado">Por Estado</option>
+                                </select>
+                                <button onclick="reiniciarVistaGeovisor()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm">
+                                    🔄 Reiniciar Vista
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contenido principal del geovisor -->
+                    <div class="flex gap-4" style="height: 650px;">
+                        <!-- Panel izquierdo: estadísticas por departamento -->
+                        <div class="w-72 flex-shrink-0 bg-white rounded-lg shadow flex flex-col">
+                            <div class="p-4 border-b">
+                                <h3 class="font-semibold text-gray-800">📊 Estadísticas por Departamento</h3>
+                                <p class="text-xs text-gray-500 mt-1">Haz clic en un departamento para ver detalles</p>
+                            </div>
+                            <div id="geo-stats-lista" class="flex-1 overflow-y-auto divide-y divide-gray-100">
+                                <!-- Se llena dinámicamente -->
+                            </div>
+                            <!-- Panel de detalle del departamento seleccionado -->
+                            <div id="geo-detalle-panel" class="hidden border-t p-4 bg-blue-50">
+                                <h4 id="geo-detalle-titulo" class="font-bold text-blue-800 mb-3"></h4>
+                                <div id="geo-detalle-contenido" class="space-y-2 text-sm"></div>
+                            </div>
+                        </div>
+
+                        <!-- Mapa principal SVG -->
+                        <div class="flex-1 bg-white rounded-lg shadow relative overflow-hidden" style="min-height:400px;">
+                            <div id="mapa-bolivia-svg" style="width:100%;height:100%;position:relative;">
+                                <!-- SVG mapa de Bolivia con paths simplificados por departamento -->
+                                <svg id="bolivia-svg" viewBox="0 0 500 580" style="width:100%;height:100%;display:block;" xmlns="http://www.w3.org/2000/svg">
+                                    <!-- PANDO -->
+                                    <path id="svg-PANDO" d="M50,30 L220,30 L230,80 L180,110 L100,120 L50,100 Z" stroke="#fff" stroke-width="2" fill="#e5e7eb" style="cursor:pointer;" onclick="svgClickDepto('PANDO')"/>
+                                    <text x="130" y="72" text-anchor="middle" font-size="11" font-weight="bold" fill="#1f2937" pointer-events="none">PANDO</text>
+                                    <text id="svg-label-PANDO" x="130" y="87" text-anchor="middle" font-size="12" font-weight="bold" fill="#2563eb" pointer-events="none">-</text>
+                                    <!-- BENI -->
+                                    <path id="svg-BENI" d="M230,30 L430,30 L450,80 L440,160 L390,200 L300,210 L230,190 L180,110 L230,80 Z" stroke="#fff" stroke-width="2" fill="#e5e7eb" style="cursor:pointer;" onclick="svgClickDepto('BENI')"/>
+                                    <text x="340" y="115" text-anchor="middle" font-size="11" font-weight="bold" fill="#1f2937" pointer-events="none">BENI</text>
+                                    <text id="svg-label-BENI" x="340" y="130" text-anchor="middle" font-size="12" font-weight="bold" fill="#2563eb" pointer-events="none">-</text>
+                                    <!-- LA PAZ -->
+                                    <path id="svg-LA PAZ" d="M50,100 L100,120 L180,110 L230,190 L200,260 L130,280 L60,260 L30,200 L30,140 Z" stroke="#fff" stroke-width="2" fill="#e5e7eb" style="cursor:pointer;" onclick="svgClickDepto('LA PAZ')"/>
+                                    <text x="120" y="195" text-anchor="middle" font-size="11" font-weight="bold" fill="#1f2937" pointer-events="none">LA PAZ</text>
+                                    <text id="svg-label-LA PAZ" x="120" y="210" text-anchor="middle" font-size="12" font-weight="bold" fill="#2563eb" pointer-events="none">-</text>
+                                    <!-- ORURO -->
+                                    <path id="svg-ORURO" d="M130,280 L200,260 L230,300 L220,360 L170,380 L100,360 L80,320 Z" stroke="#fff" stroke-width="2" fill="#e5e7eb" style="cursor:pointer;" onclick="svgClickDepto('ORURO')"/>
+                                    <text x="155" y="325" text-anchor="middle" font-size="11" font-weight="bold" fill="#1f2937" pointer-events="none">ORURO</text>
+                                    <text id="svg-label-ORURO" x="155" y="340" text-anchor="middle" font-size="12" font-weight="bold" fill="#2563eb" pointer-events="none">-</text>
+                                    <!-- POTOSI -->
+                                    <path id="svg-POTOSI" d="M100,360 L170,380 L220,360 L250,400 L230,460 L160,480 L90,450 L70,400 Z" stroke="#fff" stroke-width="2" fill="#e5e7eb" style="cursor:pointer;" onclick="svgClickDepto('POTOSI')"/>
+                                    <text x="160" y="420" text-anchor="middle" font-size="11" font-weight="bold" fill="#1f2937" pointer-events="none">POTOSÍ</text>
+                                    <text id="svg-label-POTOSI" x="160" y="435" text-anchor="middle" font-size="12" font-weight="bold" fill="#2563eb" pointer-events="none">-</text>
+                                    <!-- COCHABAMBA -->
+                                    <path id="svg-COCHABAMBA" d="M200,260 L300,210 L350,240 L340,300 L290,330 L230,340 L220,360 L200,260 Z" stroke="#fff" stroke-width="2" fill="#e5e7eb" style="cursor:pointer;" onclick="svgClickDepto('COCHABAMBA')"/>
+                                    <text x="270" y="283" text-anchor="middle" font-size="11" font-weight="bold" fill="#1f2937" pointer-events="none">CBBA</text>
+                                    <text id="svg-label-COCHABAMBA" x="270" y="298" text-anchor="middle" font-size="12" font-weight="bold" fill="#2563eb" pointer-events="none">-</text>
+                                    <!-- CHUQUISACA -->
+                                    <path id="svg-CHUQUISACA" d="M230,340 L290,330 L340,360 L330,430 L270,460 L230,460 L250,400 L220,360 Z" stroke="#fff" stroke-width="2" fill="#e5e7eb" style="cursor:pointer;" onclick="svgClickDepto('CHUQUISACA')"/>
+                                    <text x="280" y="395" text-anchor="middle" font-size="10" font-weight="bold" fill="#1f2937" pointer-events="none">CHUQUISACA</text>
+                                    <text id="svg-label-CHUQUISACA" x="280" y="410" text-anchor="middle" font-size="12" font-weight="bold" fill="#2563eb" pointer-events="none">-</text>
+                                    <!-- TARIJA -->
+                                    <path id="svg-TARIJA" d="M270,460 L330,430 L360,450 L350,520 L290,550 L240,530 L230,480 Z" stroke="#fff" stroke-width="2" fill="#e5e7eb" style="cursor:pointer;" onclick="svgClickDepto('TARIJA')"/>
+                                    <text x="295" y="490" text-anchor="middle" font-size="11" font-weight="bold" fill="#1f2937" pointer-events="none">TARIJA</text>
+                                    <text id="svg-label-TARIJA" x="295" y="505" text-anchor="middle" font-size="12" font-weight="bold" fill="#2563eb" pointer-events="none">-</text>
+                                    <!-- SANTA CRUZ -->
+                                    <path id="svg-SANTA CRUZ" d="M300,210 L440,160 L490,200 L480,400 L400,450 L360,450 L330,430 L340,360 L290,330 L350,240 Z" stroke="#fff" stroke-width="2" fill="#e5e7eb" style="cursor:pointer;" onclick="svgClickDepto('SANTA CRUZ')"/>
+                                    <text x="400" y="320" text-anchor="middle" font-size="11" font-weight="bold" fill="#1f2937" pointer-events="none">SANTA CRUZ</text>
+                                    <text id="svg-label-SANTA CRUZ" x="400" y="335" text-anchor="middle" font-size="12" font-weight="bold" fill="#2563eb" pointer-events="none">-</text>
+                                </svg>
+                                <!-- Tooltip SVG -->
+                                <div id="svg-tooltip" style="display:none;position:absolute;background:rgba(0,0,0,0.85);color:#fff;padding:8px 12px;border-radius:6px;font-size:12px;pointer-events:none;z-index:10;max-width:200px;"></div>
+                            </div>
+                            <!-- Leyenda -->
+                            <div class="geo-legend" id="geo-leyenda">
+                                <div class="font-semibold text-gray-700 mb-2">Leyenda</div>
+                                <div id="geo-leyenda-contenido">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <div style="width:14px;height:14px;border-radius:3px;background:#16a34a;"></div>
+                                        <span>80-100% avance</span>
+                                    </div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <div style="width:14px;height:14px;border-radius:3px;background:#d97706;"></div>
+                                        <span>50-79% avance</span>
+                                    </div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <div style="width:14px;height:14px;border-radius:3px;background:#dc2626;"></div>
+                                        <span>20-49% avance</span>
+                                    </div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <div style="width:14px;height:14px;border-radius:3px;background:#6b7280;"></div>
+                                        <span>0-19% avance</span>
+                                    </div>
+                                    <hr class="my-2"/>
+                                    <div class="text-xs text-gray-500" id="geo-leyenda-modo">Color = % avance</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Panel derecho: técnicos por zona -->
+                        <div class="w-64 flex-shrink-0 bg-white rounded-lg shadow flex flex-col">
+                            <div class="p-4 border-b">
+                                <h3 class="font-semibold text-gray-800">👷 Técnicos por Zona</h3>
+                            </div>
+                            <div id="geo-tecnicos-zona" class="flex-1 overflow-y-auto divide-y divide-gray-100 text-sm">
+                                <!-- Se llena dinámicamente -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- KPIs resumen geovisor -->
+                    <div class="grid grid-cols-4 gap-4 mt-4">
+                        <div class="bg-white p-4 rounded-lg shadow text-center">
+                            <div class="text-2xl font-bold text-blue-600" id="geo-kpi-depto-top">-</div>
+                            <div class="text-xs text-gray-500 mt-1">Depto. Más Activo</div>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow text-center">
+                            <div class="text-2xl font-bold text-green-600" id="geo-kpi-avance-max">-</div>
+                            <div class="text-xs text-gray-500 mt-1">Mayor Avance</div>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow text-center">
+                            <div class="text-2xl font-bold text-red-600" id="geo-kpi-avance-min">-</div>
+                            <div class="text-xs text-gray-500 mt-1">Menor Avance</div>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow text-center">
+                            <div class="text-2xl font-bold text-purple-600" id="geo-kpi-deptos-activos">-</div>
+                            <div class="text-xs text-gray-500 mt-1">Departamentos Activos</div>
                         </div>
                     </div>
                 </div>
@@ -940,6 +1124,9 @@
                 case 'gestion':
                     actualizarGestion();
                     break;
+                case 'geovisor':
+                    actualizarGeovisor();
+                    break;
                 // Aquí van los otros casos...
             }
         }
@@ -1058,7 +1245,7 @@
         // Funciones para administrador
         function cambiarTab(tab) {
             // Ocultar todos los contenidos
-            ['general', 'tecnicos', 'supervisores', 'tareas', 'ubicaciones', 'fechas', 'comparativas', 'alertas', 'gestion'].forEach(t => {
+            ['general', 'tecnicos', 'supervisores', 'tareas', 'ubicaciones', 'fechas', 'comparativas', 'alertas', 'geovisor', 'gestion'].forEach(t => {
                 const content = document.getElementById('content-' + t);
                 const tabBtn = document.getElementById('tab-' + t);
                 if (content) content.classList.add('hidden');
@@ -1837,6 +2024,298 @@ ${detalleTareas || 'No tiene tareas asignadas'}
 
         // Inicializar aplicación
         document.addEventListener('DOMContentLoaded', inicializar);
+
+        // ===================== GEOVISOR =====================
+        let deptSeleccionado = null;
+
+        const DEPT_CENTROIDS = {
+            'CHUQUISACA': [-19.03, -65.26],
+            'LA PAZ':     [-16.50, -68.15],
+            'COCHABAMBA': [-17.39, -66.16],
+            'ORURO':      [-17.96, -67.11],
+            'POTOSI':     [-19.58, -65.75],
+            'TARIJA':     [-21.54, -64.73],
+            'SANTA CRUZ': [-17.78, -63.18],
+            'BENI':       [-14.83, -65.38],
+            'PANDO':      [-11.00, -68.77]
+        };
+
+        const MUNICIPIO_COORDS = {
+            'SUCRE':               [-19.04, -65.26],
+            'LA PAZ':              [-16.50, -68.15],
+            'SANTA CRUZ':          [-17.78, -63.18],
+            'COCHABAMBA':          [-17.39, -66.16],
+            'POTOSI':              [-19.58, -65.75],
+            'ORURO':               [-17.96, -67.11],
+            'TARIJA':              [-21.54, -64.73],
+            'TRINIDAD':            [-14.83, -64.90],
+            'COBIJA':              [-11.03, -68.77],
+            'PALOS BLANCOS':       [-15.97, -67.06],
+            'PUNA':                [-19.85, -65.47],
+            'SANTIAGO DE HUATA':   [-15.97, -68.86]
+        };
+
+        function getColorPorAvance(avance) {
+            if (avance >= 80) return '#16a34a';
+            if (avance >= 50) return '#d97706';
+            if (avance >= 20) return '#dc2626';
+            return '#6b7280';
+        }
+
+        function getColorPorEstado(finalizadas, enProceso, observadas, total) {
+            if (total === 0) return '#6b7280';
+            const pctFin = (finalizadas / total) * 100;
+            if (pctFin >= 70) return '#16a34a';
+            if (enProceso > observadas) return '#2563eb';
+            if (observadas > 0) return '#dc2626';
+            return '#d97706';
+        }
+
+        function inicializarGeovisor() {
+            actualizarGeovisor();
+        }
+
+        function svgClickDepto(dept) {
+            const datos = geoDataCache[dept];
+            if (!datos) return;
+            const avance = datos.avance || 0;
+            seleccionarDepartamento(dept, datos, avance);
+        }
+
+        function crearPopupDepartamento(dept, datos, avance) {
+            return `
+                <div style="min-width:220px; font-family:sans-serif;">
+                    <div style="font-weight:bold;font-size:14px;color:#1e40af;border-bottom:2px solid #2563eb;padding-bottom:6px;margin-bottom:8px;">
+                        📍 ${dept}
+                    </div>
+                    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+                        <tr><td style="padding:3px 0;color:#6b7280;">Total Tareas</td><td style="font-weight:bold;text-align:right;">${datos.tareas.length}</td></tr>
+                        <tr><td style="padding:3px 0;color:#6b7280;">Avance Promedio</td><td style="font-weight:bold;text-align:right;color:${getColorPorAvance(avance)};">${avance.toFixed(1)}%</td></tr>
+                        <tr><td style="padding:3px 0;color:#16a34a;">✅ Finalizadas</td><td style="font-weight:bold;text-align:right;">${datos.finalizadas}</td></tr>
+                        <tr><td style="padding:3px 0;color:#2563eb;">🔄 En Proceso</td><td style="font-weight:bold;text-align:right;">${datos.enProceso}</td></tr>
+                        <tr><td style="padding:3px 0;color:#dc2626;">⚠️ Observadas</td><td style="font-weight:bold;text-align:right;">${datos.observadas}</td></tr>
+                        <tr><td style="padding:3px 0;color:#6b7280;">Técnicos</td><td style="font-weight:bold;text-align:right;">${datos.tecnicosNombres.length}</td></tr>
+                    </table>
+                    <div style="margin-top:8px;background:#f3f4f6;border-radius:4px;height:8px;">
+                        <div style="height:8px;border-radius:4px;background:${getColorPorAvance(avance)};width:${avance.toFixed(0)}%;"></div>
+                    </div>
+                </div>`;
+        }
+
+        function seleccionarDepartamento(dept, datos, avance) {
+            deptSeleccionado = dept;
+            // Resaltar en mapa SVG
+            document.querySelectorAll('#bolivia-svg path').forEach(el => el.classList.remove('dept-activo'));
+            const svgPath = document.getElementById('svg-' + dept);
+            if (svgPath) svgPath.classList.add('dept-activo');
+            // Resaltar en lista
+            document.querySelectorAll('.geo-stat-card').forEach(el => {
+                el.classList.toggle('activo', el.dataset.dept === dept);
+            });
+            // Panel de detalle
+            const panel = document.getElementById('geo-detalle-panel');
+            const titulo = document.getElementById('geo-detalle-titulo');
+            const contenido = document.getElementById('geo-detalle-contenido');
+            panel.classList.remove('hidden');
+            titulo.textContent = '📍 ' + dept;
+
+            const tecnicosLista = datos.tecnicosNombres.slice(0, 5).join(', ') + (datos.tecnicosNombres.length > 5 ? ` +${datos.tecnicosNombres.length - 5}` : '');
+            contenido.innerHTML = `
+                <div class="flex justify-between"><span class="text-gray-500">Total tareas:</span><span class="font-bold">${datos.tareas.length}</span></div>
+                <div class="flex justify-between"><span class="text-gray-500">Avance:</span><span class="font-bold" style="color:${getColorPorAvance(avance)};">${avance.toFixed(1)}%</span></div>
+                <div class="flex justify-between"><span class="text-gray-500">✅ Finalizadas:</span><span class="font-bold text-green-700">${datos.finalizadas}</span></div>
+                <div class="flex justify-between"><span class="text-gray-500">🔄 En Proceso:</span><span class="font-bold text-blue-700">${datos.enProceso}</span></div>
+                <div class="flex justify-between"><span class="text-gray-500">⚠️ Observadas:</span><span class="font-bold text-red-700">${datos.observadas}</span></div>
+                <div class="mt-2 pt-2 border-t"><span class="text-gray-500 text-xs">Técnicos:</span><div class="text-xs mt-1 text-gray-700">${tecnicosLista || 'Ninguno'}</div></div>
+            `;
+        }
+
+        function actualizarPanelEstadisticas(datosPorDepto) {
+            const lista = document.getElementById('geo-stats-lista');
+            if (!lista) return;
+            const ordenados = Object.entries(datosPorDepto)
+                .sort((a, b) => b[1].tareas.length - a[1].tareas.length);
+            lista.innerHTML = ordenados.map(([dept, datos]) => {
+                const avance = datos.avance;
+                const color = getColorPorAvance(avance);
+                return `
+                <div class="geo-stat-card p-3" data-dept="${dept}" onclick="seleccionarDepartamento('${dept}', geoDataCache['${dept}'], ${avance})">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs font-semibold text-gray-700">${dept}</span>
+                        <span class="text-xs font-bold" style="color:${color};">${avance.toFixed(0)}%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-1.5 mb-1">
+                        <div class="h-1.5 rounded-full" style="width:${avance.toFixed(0)}%;background:${color};"></div>
+                    </div>
+                    <div class="flex gap-2 text-xs text-gray-500">
+                        <span>${datos.tareas.length} tareas</span>
+                        <span>·</span>
+                        <span class="text-green-600">${datos.finalizadas} fin.</span>
+                        <span>·</span>
+                        <span class="text-red-600">${datos.observadas} obs.</span>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // Cache global para acceso desde onclick inline en panel de estadísticas
+        let geoDataCache = {};
+
+        function calcularDatosGeovisor(filtroEstado) {
+            let tareasFiltradas = tareas;
+            if (filtroEstado && filtroEstado !== 'TODOS') {
+                tareasFiltradas = tareas.filter(t => t.estado === filtroEstado);
+            }
+            const datosPorDepto = {};
+            departamentos.forEach(dept => {
+                const td = tareasFiltradas.filter(t => t.departamento === dept);
+                const finalizadas = td.filter(t => t.estado === 'FINALIZADO').length;
+                const enProceso  = td.filter(t => t.estado === 'EN PROCESO').length;
+                const observadas = td.filter(t => t.estado === 'OBSERVADO').length;
+                const avance = td.length > 0
+                    ? td.reduce((acc, t) => acc + parseFloat(calcularPorcentajeAvance(t)), 0) / td.length
+                    : 0;
+                const tecnicosIds = [...new Set(td.map(t => t.tecnico_id))];
+                const tecnicosNombres = tecnicosIds.map(id => getNombreUsuario(id));
+                datosPorDepto[dept] = { tareas: td, finalizadas, enProceso, observadas, avance, tecnicosNombres };
+            });
+            return { datosPorDepto, tareasFiltradas };
+        }
+
+        function actualizarGeovisor() {
+            const filtroEstado = document.getElementById('geo-filtro-estado')?.value || 'TODOS';
+            const modo = document.getElementById('geo-modo')?.value || 'avance';
+
+            const { datosPorDepto, tareasFiltradas } = calcularDatosGeovisor(filtroEstado);
+            geoDataCache = datosPorDepto;
+
+            // Siempre actualizar paneles laterales y KPIs (no dependen del mapa)
+            actualizarPanelEstadisticas(datosPorDepto);
+            actualizarPanelTecnicosZona(datosPorDepto);
+            actualizarKpisGeovisor(datosPorDepto);
+            actualizarLeyenda(modo);
+
+            // Actualizar mapa SVG
+            actualizarMapaSVG(datosPorDepto, modo);
+        }
+
+        function actualizarMapaSVG(datosPorDepto, modo) {
+            const maxTareas = Math.max(1, ...Object.values(datosPorDepto).map(d => d.tareas.length));
+            departamentos.forEach(dept => {
+                const path = document.getElementById('svg-' + dept);
+                const label = document.getElementById('svg-label-' + dept);
+                if (!path) return;
+                const datos = datosPorDepto[dept];
+                if (!datos) return;
+                const total = datos.tareas.length;
+                const avance = datos.avance;
+                let color;
+                if (modo === 'avance') {
+                    color = getColorPorAvance(avance);
+                } else if (modo === 'estado') {
+                    color = getColorPorEstado(datos.finalizadas, datos.enProceso, datos.observadas, total);
+                } else {
+                    const pct = total / maxTareas;
+                    color = pct >= 0.7 ? '#1d4ed8' : pct >= 0.4 ? '#2563eb' : pct >= 0.1 ? '#93c5fd' : '#dbeafe';
+                }
+                path.setAttribute('fill', color);
+                path.setAttribute('fill-opacity', total === 0 ? '0.25' : '0.75');
+                if (label) {
+                    label.textContent = avance.toFixed(0) + '%';
+                    label.setAttribute('fill', total === 0 ? '#9ca3af' : '#fff');
+                }
+                // Tooltip al hover
+                path.onmouseenter = function(e) {
+                    const tt = document.getElementById('svg-tooltip');
+                    if (tt) {
+                        tt.innerHTML = `<b>${dept}</b><br/>Tareas: ${total}<br/>Avance: ${avance.toFixed(1)}%<br/>✅ ${datos.finalizadas} fin. · 🔄 ${datos.enProceso} proc. · ⚠️ ${datos.observadas} obs.`;
+                        tt.style.display = 'block';
+                    }
+                };
+                path.onmousemove = function(e) {
+                    const tt = document.getElementById('svg-tooltip');
+                    const rect = document.getElementById('mapa-bolivia-svg').getBoundingClientRect();
+                    if (tt) {
+                        tt.style.left = (e.clientX - rect.left + 12) + 'px';
+                        tt.style.top  = (e.clientY - rect.top  + 12) + 'px';
+                    }
+                };
+                path.onmouseleave = function() {
+                    const tt = document.getElementById('svg-tooltip');
+                    if (tt) tt.style.display = 'none';
+                };
+            });
+        }
+
+        function actualizarPanelTecnicosZona(datosPorDepto) {
+            const panel = document.getElementById('geo-tecnicos-zona');
+            if (!panel) return;
+            const porDepto = Object.entries(datosPorDepto)
+                .filter(([, d]) => d.tecnicosNombres.length > 0)
+                .sort((a, b) => b[1].tecnicosNombres.length - a[1].tecnicosNombres.length);
+            panel.innerHTML = porDepto.map(([dept, datos]) => `
+                <div class="p-3">
+                    <div class="font-semibold text-gray-700 text-xs mb-1">${dept}</div>
+                    <div class="text-xs text-gray-500">${datos.tecnicosNombres.slice(0, 4).join(', ')}${datos.tecnicosNombres.length > 4 ? ` +${datos.tecnicosNombres.length - 4} más` : ''}</div>
+                    <div class="text-xs text-blue-600 mt-0.5">${datos.tecnicosNombres.length} técnico${datos.tecnicosNombres.length !== 1 ? 's' : ''}</div>
+                </div>
+            `).join('') || '<div class="p-4 text-gray-400 text-sm text-center">Sin datos</div>';
+        }
+
+        function actualizarKpisGeovisor(datosPorDepto) {
+            const ordenados = Object.entries(datosPorDepto)
+                .filter(([, d]) => d.tareas.length > 0)
+                .sort((a, b) => b[1].tareas.length - a[1].tareas.length);
+            const porAvance = Object.entries(datosPorDepto)
+                .filter(([, d]) => d.tareas.length > 0)
+                .sort((a, b) => b[1].avance - a[1].avance);
+
+            const elDeptoTop = document.getElementById('geo-kpi-depto-top');
+            const elAvanceMax = document.getElementById('geo-kpi-avance-max');
+            const elAvanceMin = document.getElementById('geo-kpi-avance-min');
+            const elActivos  = document.getElementById('geo-kpi-deptos-activos');
+
+            if (elDeptoTop) elDeptoTop.textContent = ordenados[0]?.[0]?.split(' ')[0] || '-';
+            if (elAvanceMax) elAvanceMax.textContent = porAvance[0] ? porAvance[0][1].avance.toFixed(0) + '%' : '-';
+            if (elAvanceMin) elAvanceMin.textContent = porAvance[porAvance.length - 1] ? porAvance[porAvance.length - 1][1].avance.toFixed(0) + '%' : '-';
+            if (elActivos)  elActivos.textContent = ordenados.length;
+        }
+
+        function actualizarLeyenda(modo) {
+            const contenido = document.getElementById('geo-leyenda-contenido');
+            if (!contenido) return;
+            if (modo === 'cantidad') {
+                contenido.innerHTML = `
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#1d4ed8;"></div><span>Alta cantidad</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#2563eb;"></div><span>Media</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#93c5fd;"></div><span>Baja</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#dbeafe;"></div><span>Sin tareas</span></div>
+                    <hr class="my-2"/><div class="text-xs text-gray-500">Tamaño = cantidad de tareas</div>`;
+            } else if (modo === 'estado') {
+                contenido.innerHTML = `
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#16a34a;"></div><span>&ge;70% finalizadas</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#2563eb;"></div><span>En proceso</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#dc2626;"></div><span>Con observadas</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#d97706;"></div><span>Mixto</span></div>
+                    <hr class="my-2"/><div class="text-xs text-gray-500">Tamaño = cantidad de tareas</div>`;
+            } else {
+                contenido.innerHTML = `
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#16a34a;"></div><span>80-100% avance</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#d97706;"></div><span>50-79% avance</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#dc2626;"></div><span>20-49% avance</span></div>
+                    <div class="flex items-center gap-2 mb-1"><div style="width:14px;height:14px;border-radius:50%;background:#6b7280;"></div><span>0-19% avance</span></div>
+                    <hr class="my-2"/><div class="text-xs text-gray-500">Tamaño = cantidad de tareas</div>`;
+            }
+        }
+
+        function reiniciarVistaGeovisor() {
+            deptSeleccionado = null;
+            document.getElementById('geo-detalle-panel')?.classList.add('hidden');
+            document.querySelectorAll('#bolivia-svg path').forEach(el => el.classList.remove('dept-activo'));
+            document.querySelectorAll('.geo-stat-card').forEach(el => el.classList.remove('activo'));
+        }
+        // ===================== FIN GEOVISOR =====================
+
     </script>
 </body>
 </html>
